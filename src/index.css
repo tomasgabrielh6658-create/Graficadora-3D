@@ -1,10 +1,49 @@
 @import "tailwindcss";
 
+@theme {
+  --color-ink: #0b0b10;
+  --color-cobalt: #1f3bf5;
+  --color-cobalt-600: #1530d6;
+  --color-cobalt-50: #eff2ff;
+  --color-cobalt-100: #dde3ff;
+  --color-line: #e4e4ea;
+  --color-mute: #6b6b78;
+  --color-paper: #f7f7f9;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+}
+
 html, body, #root {
   height: 100%;
 }
 
 body {
-  @apply bg-slate-100 text-slate-800 antialiased;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  @apply bg-white text-ink antialiased;
+  font-family: var(--font-sans);
+  accent-color: var(--color-cobalt);
 }
+
+@layer base {
+  input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--color-cobalt);
+    outline-offset: -1px;
+  }
+  input[type="number"] { font-family: var(--font-mono); }
+}
+
+/* Secciones numeradas del panel lateral: 01, 02, 03… */
+.sidebar { counter-reset: sec; }
+.sidebar summary::before {
+  counter-increment: sec;
+  content: counter(sec, decimal-leading-zero);
+  font-family: var(--font-mono);
+  color: var(--color-cobalt);
+  margin-right: 0.5rem;
+  font-weight: 500;
+}
+.sidebar summary { list-style: none; }
+.sidebar summary::-webkit-details-marker { display: none; }
+.sidebar details:not([open]) .chev { transform: rotate(-90deg); }
+
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--color-line); }

@@ -49,11 +49,11 @@ export const PRESETS: Preset[] = [
   {
     id: 'm1-lente',
     module: 1,
-    name: 'Lente entre parábolas (partición en T2)',
+    name: 'Lente entre parábolas (en dx dy hay que partir)',
     constraints: [C('y >= x^2'), C('y <= 2 - x^2')],
     settings: { sweep: 'T1' },
     limitsTex: '\\int_{-1}^{1}\\!\\int_{x^2}^{2-x^2} f\\,dy\\,dx',
-    note: 'En T1 es una sola integral; en T2 la frontera lateral cambia y requiere partición.',
+    note: 'En dy dx es una sola integral; en dx dy el borde cambia en y = 1 y hay que partir.',
   },
   {
     id: 'm1-cuadrante',
@@ -74,20 +74,20 @@ export const PRESETS: Preset[] = [
   {
     id: 'm1-tp13-1f',
     module: 1,
-    name: 'TP13 1f — Entre x=y² y x=y+2 (T2 simple)',
+    name: 'TP13 1f — Entre x=y² y x=y+2',
     constraints: [C('y >= -1'), C('y <= 2'), C('x >= y^2'), C('x <= y + 2')],
     settings: { sweep: 'T2' },
     limitsTex: '\\int_{-1}^{2}\\!\\int_{y^2}^{y+2} f\\,dx\\,dy',
-    note: 'En T2 es una sola integral; en T1 hay que partir en x = 1 y x = 2.',
+    note: 'En dx dy es una sola integral; en dy dx hay que partir en x = 1.',
   },
   {
     id: 'm1-tp13-2',
     module: 1,
-    name: 'TP13 2 — y=2x, y=2−x, y=8 (partición en T1)',
+    name: 'TP13 2 — y=2x, y=2−x, y=8',
     constraints: [C('y >= 2*x'), C('y >= 2 - x'), C('y <= 8')],
     settings: { sweep: 'T1' },
     limitsTex: '\\int_{4/3}^{8}\\!\\int_{2-y}^{y/2} f\\,dx\\,dy',
-    note: 'T1 requiere partir en x = 2/3 (dos integrales); T2 es una sola.',
+    note: 'En dy dx hay que partir en x = 2/3 (dos integrales); en dx dy es una sola.',
   },
   {
     id: 'm1-tp13-4c',
@@ -103,7 +103,7 @@ export const PRESETS: Preset[] = [
     name: 'TP13 10 — Hipérbolas xy∈[1,2] entre y=x e y=4x',
     constraints: [C('x*y >= 1'), C('x*y <= 2'), C('y >= x'), C('y <= 4*x')],
     settings: { sweep: 'T1' },
-    note: 'Esta misma región está como preset en el Módulo 2 con la transformación u=xy, v=y/x.',
+    note: 'Esta misma región está en “Cambio de variables” con u = xy, v = y/x: ahí queda un rectángulo.',
   },
   {
     id: 'm2-corona',
@@ -252,7 +252,7 @@ export const PRESETS: Preset[] = [
     name: 'TP14 8d — Cilindro desplazado x²+y²=4x bajo x²+y²=4z',
     constraints: [C('x^2 + y^2 <= 4*x'), C('z >= 0'), C('4*z <= x^2 + y^2')],
     settings: { order: 'dz_dy_dx' },
-    note: 'El cilindro no está centrado en el origen — probá el auto-encuadre.',
+    note: 'El cilindro no está centrado en el origen.',
   },
   {
     id: 'm3-tp14-8e',
@@ -279,7 +279,7 @@ export const PRESETS: Preset[] = [
       C('y^2 + z^2 >= 4'), C('y^2 + z^2 <= 9'), C('x >= 1'), C('x <= 2'),
     ],
     settings: { order: 'dx_dz_dy' },
-    note: 'Perforación en x: la sombra en yz es un anillo. Orden dx…',
+    note: 'Integrando primero en x, la sombra en el plano yz es un anillo.',
   },
   {
     id: 'm4-tp16-9',

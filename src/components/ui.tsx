@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { AsciiFigure } from './AsciiArt'
+import { TeX } from './LimitsDock'
+import { PRESETS } from '../lib/presets'
+import type { BBox } from '../types'
 
 export function Logo({ size = 28 }: { size?: number }) {
   return (
@@ -194,5 +197,65 @@ export function Badge({ children, color = '#1f3bf5' }: { children: ReactNode; co
     >
       {children}
     </span>
+  )
+}
+
+/** Selector de ejercicios de ejemplo del módulo. */
+export function PresetPicker({ module, value, onChange }: { module: 1 | 2 | 3 | 4; value: string; onChange: (id: string) => void }) {
+  const list = PRESETS.filter((p) => p.module === module)
+  return (
+    <Select
+      value={list.some((p) => p.id === value) ? value : ''}
+      onChange={onChange}
+      options={[{ value: '', label: '— Elegí un ejemplo —' }, ...list.map((p) => ({ value: p.id, label: p.name }))]}
+    />
+  )
+}
+
+/** Botones excluyentes con fórmula (p. ej. dy dx / dx dy). */
+export function Segmented<T extends string>({
+  value, onChange, options, cols = 2,
+}: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; tex: string; hint?: string }[]
+  cols?: number
+}) {
+  return (
+    <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+      {options.map((o) => {
+        const active = o.value === value
+        return (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            className={`flex flex-col items-center border px-1.5 py-1.5 transition-colors ${
+              active ? 'border-cobalt bg-cobalt text-white' : 'border-line text-ink hover:border-ink'
+            }`}
+          >
+            <TeX tex={o.tex} className="text-[13px]" />
+            {o.hint && <span className={`text-[10px] ${active ? 'text-white/80' : 'text-mute'}`}>{o.hint}</span>}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Caja de dibujo en lenguaje claro: "x desde … hasta …". */
+export function BoxEditor({ bbox, onChange }: { bbox: BBox; onChange: (b: BBox) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] leading-snug text-mute">
+        Zona del espacio donde se dibuja el sólido. Normalmente se ajusta sola; cambiala solo si el sólido aparece cortado.
+      </p>
+      {(['x', 'y', 'z'] as const).map((a) => (
+        <div key={a} className="flex items-center gap-1.5 text-[11px]">
+          <span className="w-3 font-serif italic">{a}</span>
+          <NumField label="desde" value={bbox[`${a}0`]} onChange={(v) => onChange({ ...bbox, [`${a}0`]: v })} />
+          <NumField label="hasta" value={bbox[`${a}1`]} onChange={(v) => onChange({ ...bbox, [`${a}1`]: v })} />
+        </div>
+      ))}
+    </div>
   )
 }

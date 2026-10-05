@@ -15,8 +15,9 @@ import { Plot2D } from '../components/Plot2D'
 import { Scene3D, Solid } from '../components/Scene3D'
 import { CylindricalGuides, SphericalGuides, WarpedBox } from '../components/Guides3D'
 import { ConstraintEditor } from '../components/ConstraintEditor'
-import { LimitsDock, TeX } from '../components/LimitsDock'
-import { Btn, Section, Select, SliderRow, Toggle, NumField, PanelHint, PanelTitle, Sidebar } from '../components/ui'
+import { LimitsDock, N, TeX, V, dockStatus, partsNote } from '../components/LimitsDock'
+import { usePlan } from '../lib/usePlan'
+import { BoxEditor, Btn, NumField, PanelHint, PanelTitle, PresetPicker, Section, Select, Sidebar, SliderRow, Toggle } from '../components/ui'
 import { Scan } from 'lucide-react'
 
 type Mode = 'cyl' | 'cyle' | 'sph'
@@ -189,33 +190,53 @@ export default function Module4() {
       ? '\\int_{\\theta_1}^{\\theta_2}\\!\\int_{\\phi_1}^{\\phi_2}\\!\\int_{\\rho_1(\\theta,\\phi)}^{\\rho_2(\\theta,\\phi)} f\\,\\textcolor{#a855f7}{\\rho^2\\sin\\phi}\\,d\\rho\\,d\\phi\\,d\\theta'
       : '\\int_{\\theta_1}^{\\theta_2}\\!\\int_{r_1(\\theta)}^{r_2(\\theta)}\\!\\int_{z_1(r,\\theta)}^{z_2(r,\\theta)} f\\,\\textcolor{#a855f7}{r}\\,dz\\,dr\\,d\\theta'
 
+  const planReq = useMemo(() => ({ kind: 'cs3' as const, raws, mode, a: ea, b: eb }), [raws, mode, ea, eb])
+  const { plan, pending } = usePlan(planReq)
+  const live = isCyl
+    ? [
+        rIntervals.length ? (
+          <>Con <V color="#f59e0b">θ</V> = <N>{fmtNum(thetaDeg, 1)}°</N>: <V color="#0891b2">r</V> va de <N>{fmtNum(rIntervals[0].a, 2)}</N> a <N>{fmtNum(rIntervals[rIntervals.length - 1].b, 2)}</N></>
+        ) : (
+          <span className="text-mute">Con θ = {fmtNum(thetaDeg, 1)}° no se toca el sólido.</span>
+        ),
+        zIn !== null && zOut !== null ? (
+          <>En (r, θ) = (<N>{fmtNum(rPos, 2)}</N>, <N>{fmtNum(thetaDeg, 1)}°</N>): <V color="#a855f7">z</V> va de <N>{fmtNum(zIn, 2)}</N> a <N>{fmtNum(zOut, 2)}</N></>
+        ) : (
+          <span className="text-mute">La vertical en (r, θ) no atraviesa el sólido: hacé click dentro de la zona azul.</span>
+        ),
+        ...(zHit?.entry?.constraint && zHit.exit?.constraint
+          ? [<span className="text-[11px] text-mute">piso <span className="text-emerald-700"><TeX tex={zHit.entry.constraint.latex} /></span>{'  ·  '}techo <span className="text-rose-700"><TeX tex={zHit.exit.constraint.latex} /></span></span>]
+          : []),
+      ]
+    : [
+        rhoEntry !== null && rhoExit !== null ? (
+          <>En la dirección (θ, φ) = (<N>{fmtNum(thetaDeg, 1)}°</N>, <N>{fmtNum(phiDeg, 1)}°</N>): <V color="#a855f7">ρ</V> va de <N>{fmtNum(rhoEntry, 2)}</N> a <N>{fmtNum(rhoExit, 2)}</N></>
+        ) : (
+          <span className="text-mute">El rayo en esa dirección no atraviesa el sólido: hacé click dentro de la zona violeta.</span>
+        ),
+      ]
   const warnings: string[] = []
-  if (mesh.vertexCount === 0) warnings.push('Región vacía dentro del viewport — revisá las restricciones')
-  else if (mesh.touchesBoundary) warnings.push('La región toca el borde del viewport')
-  if (!isCyl && !rhoIntervals.length) warnings.push('El rayo ρ no atraviesa el sólido en esta dirección')
-  if (isCyl && !zHit?.intervals.length) warnings.push('La vertical en (r, θ) no atraviesa el sólido')
-
+  if (plan?.innerSplit) warnings.push('Según la dirección, el sólido empieza o termina en superficies distintas: hay que partirlo.')
+  if (mesh.vertexCount === 0) warnings.push('No se ve ningún sólido: revisá las desigualdades o tocá “encuadrar”.')
+  else if (mesh.touchesBoundary) warnings.push('El sólido llega al borde del dibujo: puede que le falte una tapa (no está acotado).')
+    
   return (
     <div className="flex min-h-0 flex-1">
       <Sidebar fig={4}>
-        <Section title="Ejercicios típicos">
-          <Select
-            value={PRESETS.some((p) => p.id === presetId && p.module === 4) ? presetId : ''}
-            onChange={applyPreset}
-            options={[
-              { value: '', label: '— Elegir preset —' },
-              ...PRESETS.filter((p) => p.module === 4).map((p) => ({ value: p.id, label: p.name })),
-            ]}
-          />
+        <Section title="Ejemplos">
+          <PresetPicker module={4} value={presetId} onChange={applyPreset} />
+        </Section>
+        <Section title="Sólido">
+          <ConstraintEditor raws={raws} setRaws={setRaws} dims="3d" />
         </Section>
         <Section title="Coordenadas">
           <Select
             value={mode}
             onChange={(m) => setMode(m as Mode)}
             options={[
-              { value: 'cyl', label: 'Cilíndricas circulares' },
-              { value: 'cyle', label: 'Cilíndricas elípticas' },
-              { value: 'sph', label: 'Esféricas' },
+              { value: 'cyl', label: 'Cilíndricas: x = r·cos θ, y = r·sen θ, z = z' },
+              { value: 'cyle', label: 'Cilíndricas elípticas: x = a·r·cos θ, y = b·r·sen θ' },
+              { value: 'sph', label: 'Esféricas: ρ, θ, φ (φ medido desde el eje z)' },
             ]}
           />
           {mode === 'cyle' && (
@@ -224,28 +245,29 @@ export default function Module4() {
               <NumField label="b" value={eb} onChange={(v) => setEb(v)} />
             </div>
           )}
-          <div className="mt-2 border border-line bg-paper px-2 py-1 text-[11px] text-ink">
-            <TeX tex={jacTex} />
+          <div className="mt-2 flex items-center gap-2 border border-line bg-paper px-2 py-1 text-[11px] text-ink">
+            <span className="text-mute">Jacobiano</span>
+            <TeX tex={jacTex.replace(/^J/, '|J|')} />
           </div>
         </Section>
-        <Section title="Superficies frontera">
-          <ConstraintEditor raws={raws} setRaws={setRaws} dims="3d" />
-        </Section>
-        <Section title="Exploración">
-          <SliderRow label="θ (grados)" value={thetaDeg} min={0} max={360} step={0.5} onChange={setThetaDeg} fmt={(v) => `${fmtNum(v, 1)}°`} color="#f59e0b" />
+        <Section title="Explorar">
+          <SliderRow label="Ángulo θ =" value={thetaDeg} min={0} max={360} step={0.5} onChange={setThetaDeg} fmt={(v) => `${fmtNum(v, 1)}°`} color="#f59e0b" />
           {isCyl ? (
-            <SliderRow label="r" value={rPos} min={0} max={rMax} step={rMax / 300} onChange={setRPos} fmt={fmtNum} color="#0891b2" />
+            <SliderRow label="Radio r =" value={rPos} min={0} max={rMax} step={rMax / 300} onChange={setRPos} fmt={fmtNum} color="#0891b2" />
           ) : (
-            <SliderRow label="φ (grados, desde +z)" value={phiDeg} min={0} max={180} step={0.5} onChange={setPhiDeg} fmt={(v) => `${fmtNum(v, 1)}°`} color="#a855f7" />
+            <SliderRow label="Ángulo φ (desde el eje z) =" value={phiDeg} min={0} max={180} step={0.5} onChange={setPhiDeg} fmt={(v) => `${fmtNum(v, 1)}°`} color="#a855f7" />
           )}
         </Section>
-        <Section title="Visualización">
-          <SliderRow label="Opacidad del sólido" value={opacity} min={0.05} max={1} onChange={setOpacity} fmt={(v) => `${Math.round(v * 100)}%`} />
-          <Toggle checked={wire} onChange={setWire} label="Modo wireframe" />
-          <Toggle checked={showSurf} onChange={setShowSurf} label="Superficies completas (sin recortar)" />
+        <Section title="Vista">
+          <SliderRow label="Transparencia del sólido" value={opacity} min={0.05} max={1} onChange={setOpacity} fmt={(v) => `${Math.round(v * 100)}%`} />
+          <Toggle checked={wire} onChange={setWire} label="Ver como malla" />
+          <Toggle checked={showSurf} onChange={setShowSurf} label="Mostrar cada superficie completa" />
           <Btn onClick={autoFit} className="mt-2 w-full justify-center" title="Encuadra la escena al sólido automáticamente">
-            <Scan size={13} /> Encuadrar región
+            <Scan size={13} /> Encuadrar sólido
           </Btn>
+        </Section>
+        <Section title="Avanzado" defaultOpen={false}>
+          <BoxEditor bbox={bbox} onChange={setBbox} />
         </Section>
       </Sidebar>
       <main className="flex min-w-0 flex-1 flex-col">
@@ -265,7 +287,7 @@ export default function Module4() {
             </Scene3D>
           </div>
           <div className="flex w-[340px] shrink-0 flex-col border-l border-line bg-white">
-            <PanelTitle>{isCyl ? 'Base en coordenadas (θ, r)' : 'Ángulos (θ, φ)'}</PanelTitle>
+            <PanelTitle>{isCyl ? 'La base vista en (θ, r)' : 'Las direcciones vistas en (θ, φ)'}</PanelTitle>
             <div className="min-h-0 flex-1">
               <Plot2D
                 view={
@@ -296,48 +318,14 @@ export default function Module4() {
                 }}
               />
             </div>
-            <PanelHint>Click en el panel para mover {isCyl ? 'θ y r' : 'θ y φ'} · arrastrar = mover la vista</PanelHint>
+            <PanelHint>Click = mover {isCyl ? 'θ y r' : 'θ y φ'} · arrastrar = mover · rueda = zoom</PanelHint>
           </div>
         </div>
         <LimitsDock
-          tex={activePreset?.limitsTex ?? templateTex}
-          jacobianTex={jacTex}
-          live={
-            isCyl
-              ? [
-                  {
-                    label: 'r ∈ (θ actual)',
-                    value: rIntervals.length
-                      ? `[${fmtNum(rIntervals[0].a)}, ${fmtNum(rIntervals[rIntervals.length - 1].b)}]`
-                      : '—',
-                    color: '#0891b2',
-                  },
-                  {
-                    label: 'z ∈ (r, θ actual)',
-                    value:
-                      zIn !== null && zOut !== null ? `[${fmtNum(zIn)}, ${fmtNum(zOut)}]` : 'fuera',
-                    color: '#a855f7',
-                  },
-                  ...(zHit?.entry?.constraint
-                    ? [{ label: 'piso', value: zHit.entry.constraint.raw, color: '#16a34a' }]
-                    : []),
-                  ...(zHit?.exit?.constraint
-                    ? [{ label: 'techo', value: zHit.exit.constraint.raw, color: '#dc2626' }]
-                    : []),
-                ]
-              : [
-                  {
-                    label: 'ρ ∈',
-                    value:
-                      rhoEntry !== null && rhoExit !== null
-                        ? `[${fmtNum(rhoEntry)}, ${fmtNum(rhoExit)}]`
-                        : '—',
-                    color: '#a855f7',
-                  },
-                  { label: 'θ', value: `${fmtNum(thetaDeg, 1)}°`, color: '#f59e0b' },
-                  { label: 'φ', value: `${fmtNum(phiDeg, 1)}°`, color: '#a855f7' },
-                ]
-          }
+          tex={plan?.tex || activePreset?.limitsTex || templateTex}
+          status={dockStatus(plan, pending)}
+          parts={partsNote(plan, '\theta')}
+          live={live}
           warnings={warnings}
           note={activePreset?.note}
         />

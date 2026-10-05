@@ -4,16 +4,18 @@ import { fitBounds2D } from '../lib/autofit'
 import { analyzeSweep, sweepRegion } from '../lib/sweeps'
 import { compileConstraints, useCompiled } from '../lib/useConstraints'
 import { usePersisted } from '../lib/persistence'
+import { usePlan } from '../lib/usePlan'
 import { PRESETS, presetRaws, type RawConstraint } from '../lib/presets'
 import { fmtNum } from '../lib/transforms'
 import { Plot2D } from '../components/Plot2D'
 import { ConstraintEditor } from '../components/ConstraintEditor'
-import { LimitsDock, TeX } from '../components/LimitsDock'
-import { Btn, Section, Select, SliderRow, NumField, PanelTitle, Sidebar } from '../components/ui'
-import { Scan } from 'lucide-react'
+import { LimitsDock, N, TeX, V, dockStatus, partsNote } from '../components/LimitsDock'
+import { PanelTitle, PresetPicker, Section, Segmented, Sidebar, SliderRow } from '../components/ui'
 import type { SweepType2D } from '../types'
 
 const DEFAULT_VIEW = { x0: -2, x1: 3, y0: -2, y1: 3 }
+const OUTER_C = '#d97706'
+const INNER_C = '#0891b2'
 
 export default function Module1() {
   const preset = PRESETS.find((p) => p.id === 'm1-parab-recta')!
@@ -39,12 +41,20 @@ export default function Module1() {
     () => sweepRegion(region, sweepAxis, { x: pos, y: pos, z: 0 }, sLo, sHi),
     [region, sweepAxis, pos, sLo, sHi],
   )
+  const planReq = useMemo(() => ({ kind: 'cart2' as const, raws, inner: sweepAxis }), [raws, sweepAxis])
+  const { plan, pending } = usePlan(planReq)
 
   useEffect(() => {
     if (analysis.outerLo !== null && analysis.outerHi !== null) {
       setPos((p) => Math.min(Math.max(p, analysis.outerLo!), analysis.outerHi!))
     }
   }, [analysis.outerLo, analysis.outerHi])
+
+  const fitTo = (rs: RawConstraint[]) => {
+    const r = buildRegion(compileConstraints(rs, '2d').cons)
+    const fit = fitBounds2D((x, y) => r.field(x, y, 0))
+    if (fit) setView(fit.view)
+  }
 
   const applyPreset = (id: string) => {
     const p = PRESETS.find((q) => q.id === id && q.module === 1)
@@ -53,18 +63,7 @@ export default function Module1() {
     const pr = presetRaws(p)
     setRaws(pr)
     if (p.settings?.sweep) setSweep(p.settings.sweep)
-    if (p.bbox) {
-      setView({ x0: p.bbox.x0 ?? -2, x1: p.bbox.x1 ?? 3, y0: p.bbox.y0 ?? -2, y1: p.bbox.y1 ?? 3 })
-    } else {
-      const fit = fitBounds2D((x, y) => buildRegion(compileConstraints(pr, '2d').cons).field(x, y, 0))
-      if (fit) setView(fit.view)
-    }
-    setPos((view.x0 + view.x1) / 2)
-  }
-
-  const autoFit = () => {
-    const fit = fitBounds2D((x, y) => region.field(x, y, 0))
-    if (fit) setView(fit.view)
+    fitTo(pr)
   }
 
   const activePreset = PRESETS.find((p) => p.id === presetId)
@@ -76,95 +75,81 @@ export default function Module1() {
       clip: (x: number, y: number) => region.field(x, y, 0),
     }))
 
-  const innerVar = sweep === 'T1' ? 'y' : 'x'
-  const outerVar = sweep === 'T1' ? 'x' : 'y'
-  const diffs = sweep === 'T1'
-    ? '\\textcolor{#0891b2}{dy}\\,\\textcolor{#d97706}{dx}'
-    : '\\textcolor{#d97706}{dx}\\,\\textcolor{#0891b2}{dy}'
-  const a = analysis.outerLo
-  const b = analysis.outerHi
-  const tex = `\\int_{${a !== null ? fmtNum(a) : 'a'}}^{${b !== null ? fmtNum(b) : 'b'}}\\!\\int_{g_1(${outerVar})}^{g_2(${outerVar})} f\\,${diffs}`
+  const innerVar = sweepAxis
+  const outerVar = outerAxis
+  const genericTex = `\\int_{a}^{b}\\!\\int_{g_1(${outerVar})}^{g_2(${outerVar})} f\\,d${innerVar}\\,d${outerVar}`
+  const cuts = plan && plan.pieces.length > 1 ? plan.pieces.slice(0, -1).map((p) => p.b) : analysis.breaks
 
   const warnings: string[] = []
-  if (analysis.partitions === 0) warnings.push('La región está vacía dentro del viewport')
-  else if (analysis.partitions > 1)
-    warnings.push(`La región requiere ${analysis.partitions} integrales en el orden ${diffs.replace(/\\textcolor\{[^}]*\}\{([^}]*)\}/g, '$1').replace(/\\/g, '')}`)
-  if (analysis.multiInterval) warnings.push('El barrido corta la región en tramos separados')
+  if (analysis.partitions === 0) warnings.push('No se ve ninguna región: revisá las desigualdades o tocá “encuadrar”.')
+  if (analysis.multiInterval) warnings.push(`Una misma recta corta la región en tramos separados: dividila a mano.`)
+
+  const live = hit.intervals.length
+    ? [
+        <>
+          Corte en <V color={OUTER_C}>{outerVar}</V> = <N>{fmtNum(pos, 2)}</N>: <V color={INNER_C}>{innerVar}</V> va de{' '}
+          <N>{fmtNum(hit.intervals[0].a, 2)}</N> a <N>{fmtNum(hit.intervals[hit.intervals.length - 1].b, 2)}</N>
+        </>,
+        <span className="text-[11px] text-mute">
+          entra por <span className="text-emerald-700"><TeX tex={hit.entry?.constraint?.latex ?? '?'} /></span>
+          {'  ·  '}sale por <span className="text-rose-700"><TeX tex={hit.exit?.constraint?.latex ?? '?'} /></span>
+        </span>,
+      ]
+    : [<span className="text-mute">Mové la recta de corte hasta que toque la región.</span>]
 
   return (
     <div className="flex min-h-0 flex-1">
       <Sidebar fig={1}>
-        <Section title="Ejercicios típicos">
-          <Select
-            value={PRESETS.some((p) => p.id === presetId && p.module === 1) ? presetId : ''}
-            onChange={applyPreset}
-            options={[
-              { value: '', label: '— Elegir preset —' },
-              ...PRESETS.filter((p) => p.module === 1).map((p) => ({ value: p.id, label: p.name })),
-            ]}
-          />
+        <Section title="Ejemplos">
+          <PresetPicker module={1} value={presetId} onChange={applyPreset} />
         </Section>
-        <Section title="Fronteras de la región">
+        <Section title="Región">
           <ConstraintEditor raws={raws} setRaws={setRaws} dims="2d" />
         </Section>
-        <Section title="Orden de barrido">
-          <div className="flex gap-2">
-            <Btn
-              variant={sweep === 'T1' ? 'primary' : 'default'}
-              onClick={() => setSweep('T1')}
-              className="flex-1 justify-center"
-            >
-              T1 · vertical (dy dx)
-            </Btn>
-            <Btn
-              variant={sweep === 'T2' ? 'primary' : 'default'}
-              onClick={() => setSweep('T2')}
-              className="flex-1 justify-center"
-            >
-              T2 · horizontal (dx dy)
-            </Btn>
-          </div>
+        <Section title="Orden de integración">
+          <Segmented
+            value={sweep}
+            onChange={setSweep}
+            options={[
+              { value: 'T1', tex: 'dy\\,dx', hint: 'cortes verticales' },
+              { value: 'T2', tex: 'dx\\,dy', hint: 'cortes horizontales' },
+            ]}
+          />
           <div className="mt-3">
             <SliderRow
-              label={`Posición de barrido (${outerVar})`}
+              label={`Recta de corte: ${outerVar} =`}
               value={pos}
               min={oLo}
               max={oHi}
               step={(oHi - oLo) / 300}
               onChange={setPos}
-              fmt={(v) => fmtNum(v)}
+              fmt={(v) => fmtNum(v, 2)}
+              color={OUTER_C}
             />
-          </div>
-        </Section>
-        <Section title="Viewport">
-          <Btn onClick={autoFit} className="mb-2 w-full justify-center" title="Encuadra la vista a la región automáticamente">
-            <Scan size={13} /> Encuadrar región
-          </Btn>
-          <div className="grid grid-cols-2 gap-1.5">
-            {(['x0', 'x1', 'y0', 'y1'] as const).map((k) => (
-              <NumField key={k} label={k} value={view[k]} onChange={(v) => setView({ ...view, [k]: v })} />
-            ))}
+            <p className="text-[11px] leading-snug text-mute">
+              También podés arrastrar la línea violeta en el gráfico.
+            </p>
           </div>
         </Section>
       </Sidebar>
       <main className="flex min-w-0 flex-1 flex-col">
-        <PanelTitle>Plano xy · barrido {sweep === 'T1' ? 'T1 vertical (dy dx)' : 'T2 horizontal (dx dy)'}</PanelTitle>
+        <PanelTitle>Plano xy</PanelTitle>
         <div className="min-h-0 flex-1 p-2">
           <Plot2D
             view={view}
             onView={setView}
+            onHome={() => fitTo(raws)}
             field={(x, y) => region.field(x, y, 0)}
             curves={curves}
             sweep={{ axis: sweep === 'T1' ? 'v' : 'h', pos, intervals: hit.intervals }}
             onSweep={setPos}
-            axisLabels={[outerVar === 'x' ? 'x' : 'x', 'y']}
+            axisLabels={['x', 'y']}
             extras={(ctx, toPx) => {
               ctx.setLineDash([4, 4])
               ctx.strokeStyle = '#f59e0b'
               ctx.lineWidth = 1.2
-              for (const br of analysis.breaks) {
-                const [px, py] =
-                  sweep === 'T1' ? toPx(br, view.y0) : toPx(view.x0, br)
+              for (const br of cuts) {
+                const [px, py] = sweep === 'T1' ? toPx(br, view.y0) : toPx(view.x0, br)
                 ctx.beginPath()
                 if (sweep === 'T1') {
                   ctx.moveTo(px, 0)
@@ -180,35 +165,13 @@ export default function Module1() {
           />
         </div>
         <LimitsDock
-          tex={tex}
-          live={[
-            ...(a !== null && b !== null
-              ? [{ label: `${outerVar} ∈`, value: `[${fmtNum(a)}, ${fmtNum(b)}]`, color: '#d97706' }]
-              : []),
-            ...(hit.intervals.length
-              ? [
-                  {
-                    label: `${innerVar} ∈`,
-                    value: `[${fmtNum(hit.intervals[0].a)}, ${fmtNum(hit.intervals[hit.intervals.length - 1].b)}]`,
-                    color: '#0891b2',
-                  },
-                ]
-              : [{ label: `${innerVar}`, value: 'fuera de la región', color: '#94a3b8' }]),
-            ...(hit.entry?.constraint
-              ? [{ label: 'entra por', value: hit.entry.constraint.raw, color: '#16a34a' }]
-              : []),
-            ...(hit.exit?.constraint
-              ? [{ label: 'sale por', value: hit.exit.constraint.raw, color: '#dc2626' }]
-              : []),
-          ]}
+          tex={plan?.tex || genericTex}
+          status={dockStatus(plan, pending)}
+          parts={partsNote(plan, outerVar)}
+          live={live}
           warnings={warnings}
           note={activePreset?.note}
         />
-        {activePreset?.limitsTex && (
-          <div className="shrink-0 border-t border-line bg-paper px-4 py-1 text-[11px] text-mute">
-            <span className="mr-1 font-mono text-[9.5px] uppercase tracking-wider text-cobalt">referencia del TP</span> <TeX tex={activePreset.limitsTex} />
-          </div>
-        )}
       </main>
     </div>
   )

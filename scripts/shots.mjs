@@ -48,7 +48,7 @@ async function pickPreset(id) {
 
 async function toggleSurf() {
   await page.$$eval('label', (labels) => {
-    const l = [...labels].find((el) => el.textContent.includes('Superficies completas'))
+    const l = [...labels].find((el) => el.textContent.includes('superficie completa'))
     l?.querySelector('input')?.click()
   })
   await sleep(1200)
@@ -65,13 +65,13 @@ await pickPreset('m1-tp13-2')
 await shot('m1-tp13-2')
 
 // Módulo 2
-await goTab('Cambio de var.')
+await goTab('Cambio de variables')
 await shot('m2-corona')
 await pickPreset('m2-hiperbolas')
 await shot('m2-hiperbolas')
 
 // Módulo 3
-await goTab('Triples · Cartesianas')
+await goTab('03')
 await shot('m3-parab-plano')
 await pickPreset('m3-tetra-4b')
 await shot('m3-tetra-4b')
@@ -85,7 +85,7 @@ await shot('m3-tp14-4c-superficies')
 await toggleSurf()
 
 // Módulo 4
-await goTab('Cil./Esf.')
+await goTab('Cilíndricas')
 await shot('m4-helado-sph')
 await pickPreset('m4-tp16-9')
 await shot('m4-tp16-9')

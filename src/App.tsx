@@ -13,17 +13,17 @@ const GITHUB_USER = 'tomasgabrielh6658-create'
 const GITHUB_URL = `https://github.com/${GITHUB_USER}`
 
 const TABS = [
-  { id: 1, group: '∬', label: 'Dobles · Cartesianas' },
-  { id: 2, group: '∬', label: 'Dobles · Cambio de var.' },
-  { id: 3, group: '∭', label: 'Triples · Cartesianas' },
-  { id: 4, group: '∭', label: 'Triples · Cil./Esf.' },
+  { id: 1, group: '∬', label: 'Dobles', title: 'Integrales dobles en x, y' },
+  { id: 2, group: '∬', label: 'Cambio de variables', title: 'Integrales dobles con polares, elípticas u otra transformación' },
+  { id: 3, group: '∭', label: 'Triples', title: 'Integrales triples en x, y, z' },
+  { id: 4, group: '∭', label: 'Cilíndricas y esféricas', title: 'Integrales triples en cilíndricas o esféricas' },
 ] as const
 
 const HINTS: Record<number, string> = {
-  1: 'arrastrar = mover · rueda = zoom · arrastrá la línea violeta para barrer',
-  2: 'pasá el mouse sobre un plano para ver el punto correspondiente en el otro · rueda = zoom',
-  3: 'arrastrar = rotar · click derecho = mover · click en la sombra = ubicar la flecha',
-  4: 'arrastrar = rotar · click en el panel (θ, r / θ, φ) = mover la exploración',
+  1: 'arrastrar = mover · rueda = zoom · arrastrá la línea violeta para mover el corte',
+  2: 'pasá el mouse por un plano y mirá el punto equivalente en el otro · rueda = zoom',
+  3: '3D: arrastrar = girar · click derecho = mover · rueda = zoom · click en la sombra = ubicar la flecha',
+  4: '3D: arrastrar = girar · click derecho = mover · rueda = zoom · click en el panel derecho = explorar',
 }
 
 function Credit() {
@@ -90,8 +90,8 @@ export default function App() {
               <button
                 key={t.id}
                 onClick={() => setMod(t.id)}
-                title={`${t.label} · tecla ${t.id}`}
-                className={`relative flex items-center gap-2 border-r border-line px-4 text-xs transition-colors ${
+                title={`${t.title} · tecla ${t.id}`}
+                className={`relative flex items-center gap-2 whitespace-nowrap border-r border-line px-3.5 text-xs transition-colors xl:px-4 ${
                   active ? 'bg-white font-semibold text-ink' : 'text-mute hover:bg-paper hover:text-ink'
                 }`}
               >
@@ -103,7 +103,7 @@ export default function App() {
             )
           })}
         </nav>
-        <div className="dots hidden flex-1 items-center justify-end px-4 lg:flex" aria-hidden>
+        <div className="dots hidden flex-1 items-center justify-end px-4 2xl:flex" aria-hidden>
           <span className="bg-white px-1.5 font-mono text-[10px] tracking-wider text-mute">
             región <span className="text-cobalt">→</span> límites <span className="text-cobalt">→</span> ∫
           </span>
@@ -121,10 +121,10 @@ export default function App() {
               URL.revokeObjectURL(a.href)
             }}
           >
-            <Download size={13} /> Exportar
+            <Download size={13} /> <span className="hidden xl:inline">Exportar</span>
           </Btn>
           <Btn variant="ghost" title="Cargar ejercicios desde un archivo JSON" onClick={() => fileRef.current?.click()}>
-            <Upload size={13} /> Importar
+            <Upload size={13} /> <span className="hidden xl:inline">Importar</span>
           </Btn>
           <input
             ref={fileRef}

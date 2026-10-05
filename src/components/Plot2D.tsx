@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Maximize, Minus, Plus } from 'lucide-react'
 import type { Interval } from '../types'
 import { marchingSquares, type MSResult } from '../lib/marchingSquares'
 
@@ -41,6 +42,10 @@ interface Props {
   showGrid?: boolean
   clickToSet?: boolean
   onView?: (v: { x0: number; x1: number; y0: number; y1: number }) => void
+  /** botón "encuadrar": si no se pasa, vuelve a la vista original */
+  onHome?: () => void
+  /** nombres para la lectura de coordenadas del cursor */
+  coordNames?: [string, string]
 }
 
 function niceStep(range: number, target = 6): number {
@@ -335,7 +340,39 @@ export function Plot2D(props: Props) {
     return p.sweep.axis === 'v' ? Math.abs(px - sxp) : Math.abs(py - syp)
   }
 
+  const coordRef = useRef<HTMLDivElement>(null)
+  const showCoord = (m: { x: number; y: number } | null) => {
+    const el = coordRef.current
+    if (!el) return
+    if (!m) {
+      el.style.opacity = '0'
+      return
+    }
+    const [a, b] = props.coordNames ?? props.axisLabels ?? ['x', 'y']
+    const f = (v: number) => (Math.round(v * 100) / 100).toFixed(2)
+    el.textContent = `${a} = ${f(m.x)}   ${b} = ${f(m.y)}`
+    el.style.opacity = '1'
+  }
+  const zoomBy = (f: number) => {
+    const v = propsRef.current.view
+    const cx = (v.x0 + v.x1) / 2, cy = (v.y0 + v.y1) / 2
+    const nv = { x0: cx - (cx - v.x0) * f, x1: cx + (v.x1 - cx) * f, y0: cy - (cy - v.y0) * f, y1: cy + (v.y1 - cy) * f }
+    setPanView(nv)
+    propsRef.current.onView?.(nv)
+  }
+  const home = () => {
+    setPanView(null)
+    props.onHome?.()
+  }
+  const tool = 'grid h-7 w-7 place-items-center text-ink hover:bg-cobalt hover:text-white'
   return (
+    <div className="relative h-full w-full">
+    <div className="absolute right-2 top-2 z-10 flex flex-col border border-line bg-white/95 shadow-[2px_2px_0_0_rgba(11,11,16,0.06)] [&>*+*]:border-t [&>*+*]:border-line">
+      <button className={tool} title="Acercar (o rueda del mouse)" onClick={() => zoomBy(0.8)}><Plus size={14} /></button>
+      <button className={tool} title="Alejar" onClick={() => zoomBy(1.25)}><Minus size={14} /></button>
+      <button className={tool} title="Encuadrar la región" onClick={home}><Maximize size={13} /></button>
+    </div>
+    <div ref={coordRef} className="pointer-events-none absolute bottom-2 left-2 z-10 whitespace-pre border border-line bg-white/95 px-1.5 py-0.5 font-mono text-[10.5px] text-ink opacity-0 transition-opacity" />
     <canvas
       ref={canvasRef}
       className={`h-full w-full touch-none ${props.className ?? ''} cursor-grab`}
@@ -370,9 +407,10 @@ export function Plot2D(props: Props) {
           p.onView?.(nv)
           canvas.style.cursor = 'grabbing'
         } else {
-          canvas.style.cursor = sweepDistPx(m.px, m.py) < 12 ? 'grab' : 'grab'
+          canvas.style.cursor = p.sweep && p.onSweep && sweepDistPx(m.px, m.py) < 12 ? (p.sweep.axis === 'v' ? 'ew-resize' : 'ns-resize') : 'grab'
           if (!p.clickToSet) fireCursor({ x: m.x, y: m.y })
         }
+        showCoord(m)
       }}
       onPointerUp={(e) => {
         const m = evtToMath(e)
@@ -389,7 +427,9 @@ export function Plot2D(props: Props) {
       onPointerLeave={() => {
         dragMode.current = null
         fireCursor(null)
+        showCoord(null)
       }}
     />
+    </div>
   )
 }

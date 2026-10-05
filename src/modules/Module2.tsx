@@ -11,9 +11,9 @@ import {
 } from '../lib/transforms'
 import { Plot2D } from '../components/Plot2D'
 import { ConstraintEditor } from '../components/ConstraintEditor'
-import { LimitsDock, TeX } from '../components/LimitsDock'
-import { Btn, Section, Select, SliderRow, NumField, PanelTitle, Sidebar } from '../components/ui'
-import { Scan } from 'lucide-react'
+import { LimitsDock, N, TeX, V, dockStatus, partsNote } from '../components/LimitsDock'
+import { usePlan } from '../lib/usePlan'
+import { NumField, PanelTitle, PresetPicker, Section, Select, Sidebar, SliderRow } from '../components/ui'
 
 type Kind = 'polar' | 'elliptic' | 'linear' | 'custom'
 const DEFAULT_VIEW = { x0: -3, x1: 3, y0: -3, y1: 3 }
@@ -180,27 +180,44 @@ export default function Module2() {
 
   const warnings: string[] = []
   if (kind === 'linear' && Math.abs(lin[0] * lin[3] - lin[1] * lin[2]) < 1e-9)
-    warnings.push('La matriz de la transformación es singular (det = 0)')
-  if (thetaRange === null) warnings.push('El barrido no encuentra la región en el rango angular')
+    warnings.push('Esa transformación lineal no sirve: su determinante es 0.')
+  if (thetaRange === null) warnings.push('No se encuentra la región: revisá las desigualdades o tocá “encuadrar”.')
 
-  const rLive = rIntervals.length
-    ? `[${fmtNum(rIntervals[0].a)}, ${fmtNum(rIntervals[rIntervals.length - 1].b)}]`
-    : '—'
+  const planReq = useMemo(
+    () => ({ kind: 'cv2' as const, raws, transform: kind, a: ea, b: eb, lin, custom }),
+    [raws, kind, ea, eb, lin, custom],
+  )
+  const { plan, pending } = usePlan(planReq)
+  const [uN, vN] = isAngular ? ['θ', 'r'] : ['u', 'v']
+  const live = [
+    rIntervals.length ? (
+      <>
+        {isAngular ? <>Rayo con <V color="#d97706">θ</V> = <N>{fmtNum(thetaDeg, 1)}°</N></> : <>Corte en <V color="#d97706">u</V> = <N>{fmtNum(uPos, 2)}</N></>}:{' '}
+        <V color="#0891b2">{vN}</V> va de <N>{fmtNum(rIntervals[0].a, 2)}</N> a <N>{fmtNum(rIntervals[rIntervals.length - 1].b, 2)}</N>
+      </>
+    ) : (
+      <span className="text-mute">{isAngular ? `El rayo con θ = ${fmtNum(thetaDeg, 1)}° no toca la región.` : `El corte en u = ${fmtNum(uPos, 2)} no toca la región.`}</span>
+    ),
+    ...(thetaRange
+      ? [
+          <span className="text-[11px] text-mute">
+            la región ocupa {uN} entre <N>{isAngular ? `${fmtNum((thetaRange[0] * 180) / Math.PI, 1)}°` : fmtNum(thetaRange[0], 2)}</N> y{' '}
+            <N>{isAngular ? `${fmtNum((thetaRange[1] * 180) / Math.PI, 1)}°` : fmtNum(thetaRange[1], 2)}</N>
+          </span>,
+        ]
+      : []),
+  ]
 
   return (
     <div className="flex min-h-0 flex-1">
       <Sidebar fig={2}>
-        <Section title="Ejercicios típicos">
-          <Select
-            value={PRESETS.some((p) => p.id === presetId && p.module === 2) ? presetId : ''}
-            onChange={applyPreset}
-            options={[
-              { value: '', label: '— Elegir preset —' },
-              ...PRESETS.filter((p) => p.module === 2).map((p) => ({ value: p.id, label: p.name })),
-            ]}
-          />
+        <Section title="Ejemplos">
+          <PresetPicker module={2} value={presetId} onChange={applyPreset} />
         </Section>
-        <Section title="Transformación">
+        <Section title="Región en el plano xy">
+          <ConstraintEditor raws={raws} setRaws={setRaws} dims="2d" />
+        </Section>
+        <Section title="Cambio de variables">
           <Select
             value={kind}
             onChange={(k) => {
@@ -210,10 +227,10 @@ export default function Module2() {
               if (kk === 'custom') setUPos((custom.u0 + custom.u1) / 2)
             }}
             options={[
-              { value: 'polar', label: 'Polares circulares  x = r·cos θ, y = r·sen θ' },
-              { value: 'elliptic', label: 'Polares elípticas  x = a·r·cos θ, y = b·r·sen θ' },
-              { value: 'linear', label: 'Lineal  u = a·x + b·y, v = c·x + d·y' },
-              { value: 'custom', label: 'General  x = X(u,v), y = Y(u,v)' },
+              { value: 'polar', label: 'Polares: x = r·cos θ, y = r·sen θ' },
+              { value: 'elliptic', label: 'Polares elípticas: x = a·r·cos θ, y = b·r·sen θ' },
+              { value: 'linear', label: 'Lineal: u = a·x + b·y, v = c·x + d·y' },
+              { value: 'custom', label: 'Otra: x = X(u, v), y = Y(u, v)' },
             ]}
           />
           {kind === 'custom' && (
@@ -226,9 +243,9 @@ export default function Module2() {
                 <span className="w-14 shrink-0">y(u,v) =</span>
                 <input className="w-full border border-line px-1.5 py-1 font-mono text-[11px] outline-none focus:border-cobalt" value={custom.yExpr} onChange={(e) => setCustom({ ...custom, yExpr: e.target.value })} spellCheck={false} />
               </label>
-              <div className="grid grid-cols-4 gap-1">
-                {(['u0', 'u1', 'v0', 'v1'] as const).map((k) => (
-                  <NumField key={k} label={k} value={custom[k]} onChange={(v) => setCustom({ ...custom, [k]: v })} />
+              <div className="grid grid-cols-2 gap-1">
+                {([['u0', 'u desde'], ['u1', 'hasta'], ['v0', 'v desde'], ['v1', 'hasta']] as const).map(([k, l]) => (
+                  <NumField key={k} label={l} value={custom[k]} onChange={(v) => setCustom({ ...custom, [k]: v })} />
                 ))}
               </div>
               {customErrRef.current && (
@@ -249,20 +266,15 @@ export default function Module2() {
               ))}
             </div>
           )}
-          <div className="mt-2 border border-line bg-paper px-2 py-1 text-[11px] text-ink">
-            <TeX tex={T.jacobianTex} />
+          <div className="mt-2 flex items-center gap-2 border border-line bg-paper px-2 py-1 text-[11px] text-ink">
+            <span className="text-mute">Jacobiano</span>
+            <TeX tex={plan?.weightTex ? `|J| = ${plan.weightTex}` : T.jacobianTex} />
           </div>
         </Section>
-        <Section title="Fronteras en el plano xy">
-          <ConstraintEditor raws={raws} setRaws={setRaws} dims="2d" />
-          <Btn onClick={autoFit} className="mt-2 w-full justify-center" title="Encuadra la vista a la región automáticamente">
-            <Scan size={13} /> Encuadrar región
-          </Btn>
-        </Section>
-        <Section title={isAngular ? 'Barrido angular' : 'Barrido en u'}>
+        <Section title="Explorar">
           {isAngular ? (
             <SliderRow
-              label="θ (grados)"
+              label="Ángulo del rayo: θ ="
               value={thetaDeg}
               min={0}
               max={360}
@@ -273,7 +285,7 @@ export default function Module2() {
             />
           ) : (
             <SliderRow
-              label="u"
+              label="Corte: u ="
               value={uPos}
               min={T.uRange[0]}
               max={T.uRange[1]}
@@ -297,6 +309,7 @@ export default function Module2() {
                 curves={curves}
                 marks={markLeft}
                 onCursor={setCursorXY}
+                onHome={autoFit}
                 axisLabels={['x', 'y']}
                 extras={(ctx, toPx) => {
                   if (!isAngular) return
@@ -304,7 +317,7 @@ export default function Module2() {
                   const dirX = Math.cos(theta)
                   const dirY = Math.sin(theta)
                   const L = Math.max(view.x1 - view.x0, view.y1 - view.y0)
-                  const [ex, ey] = toPx(dirX * L, dirY * L)
+                  const [ex, ey] = toPx(...T.forward(theta, L / Math.min(Math.abs(kind === 'elliptic' ? Math.min(ea, eb) : 1) || 1, 1)))
                   ctx.setLineDash([4, 4])
                   ctx.strokeStyle = '#f59e0b'
                   ctx.lineWidth = 1.2
@@ -320,8 +333,8 @@ export default function Module2() {
                   ctx.font = 'italic 11px serif'
                   ctx.fillText('θ', ox + arcR * 1.15 * Math.cos(theta / 2), oy - arcR * 1.15 * Math.sin(theta / 2))
                   for (const iv of rIntervals) {
-                    const [ax, ay] = toPx(Math.cos(theta) * iv.a, Math.sin(theta) * iv.a)
-                    const [bx, by] = toPx(Math.cos(theta) * iv.b, Math.sin(theta) * iv.b)
+                    const [ax, ay] = toPx(...T.forward(theta, iv.a))
+                    const [bx, by] = toPx(...T.forward(theta, iv.b))
                     ctx.strokeStyle = '#a855f7'
                     ctx.lineWidth = 2.5
                     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke()
@@ -362,34 +375,10 @@ export default function Module2() {
           </div>
         </div>
         <LimitsDock
-          tex={activePreset?.limitsTex ?? T.integralTex}
-          jacobianTex={T.jacobianTex}
-          live={[
-            ...(thetaRange
-              ? [
-                  {
-                    label: isAngular ? 'θ ∈' : 'u ∈',
-                    value: isAngular
-                      ? `[${fmtNum((thetaRange[0] * 180) / Math.PI, 1)}°, ${fmtNum((thetaRange[1] * 180) / Math.PI, 1)}°]`
-                      : `[${fmtNum(thetaRange[0])}, ${fmtNum(thetaRange[1])}]`,
-                    color: '#d97706',
-                  },
-                ]
-              : []),
-            { label: `${isAngular ? 'r' : 'v'} ∈ (${isAngular ? 'θ' : 'u'} actual)`, value: rLive, color: '#0891b2' },
-            ...(T.jacobianAt
-              ? [{
-                  label: '|J| en el punto',
-                  value: fmtNum(
-                    T.jacobianAt(
-                      sweepU,
-                      rIntervals.length ? (rIntervals[0].a + rIntervals[rIntervals.length - 1].b) / 2 : (T.vRange[0] + T.vRange[1]) / 2,
-                    ),
-                  ),
-                  color: '#7c3aed',
-                }]
-              : []),
-          ]}
+          tex={plan?.tex || T.integralTex}
+          status={dockStatus(plan, pending)}
+          parts={partsNote(plan, isAngular ? '\theta' : 'u')}
+          live={live}
           warnings={warnings}
           note={activePreset?.note}
         />

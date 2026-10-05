@@ -8,18 +8,23 @@ import { marchingSquares } from '../lib/marchingSquares'
 import { compileConstraints, useCompiled } from '../lib/useConstraints'
 import { fitBounds3D } from '../lib/autofit'
 import { usePersisted } from '../lib/persistence'
+import { usePlan } from '../lib/usePlan'
 import { PRESETS, presetRaws, type RawConstraint } from '../lib/presets'
 import { fmtNum } from '../lib/transforms'
 import { ORDER_INFO, type BBox, type IntegrationOrder3D } from '../types'
 import { Plot2D } from '../components/Plot2D'
 import { Arrow3D, Label3D, Scene3D, Solid } from '../components/Scene3D'
 import { ConstraintEditor } from '../components/ConstraintEditor'
-import { LimitsDock, TeX } from '../components/LimitsDock'
-import { Btn, Section, Select, SliderRow, Toggle, NumField, PanelHint, PanelTitle, Sidebar } from '../components/ui'
+import { LimitsDock, N, TeX, V, dockStatus, partsNote } from '../components/LimitsDock'
+import { Btn, BoxEditor, PanelHint, PanelTitle, PresetPicker, Section, Segmented, Sidebar, SliderRow, Toggle } from '../components/ui'
 import { Scan } from 'lucide-react'
-const DEFAULT_BBOX: BBox = { x0: -2.6, x1: 2.6, y0: -2.6, y1: 2.6, z0: -0.5, z1: 4.6 }
 
-const PLANE_AXES: Record<'xy' | 'yz' | 'xz', [ 'x'|'y'|'z', 'x'|'y'|'z' ]> = {
+const DEFAULT_BBOX: BBox = { x0: -2.6, x1: 2.6, y0: -2.6, y1: 2.6, z0: -0.5, z1: 4.6 }
+const OUTER_C = '#d97706'
+const MID_C = '#0891b2'
+const INNER_C = '#a855f7'
+
+const PLANE_AXES: Record<'xy' | 'yz' | 'xz', ['x' | 'y' | 'z', 'x' | 'y' | 'z']> = {
   xy: ['x', 'y'],
   yz: ['y', 'z'],
   xz: ['x', 'z'],
@@ -47,32 +52,18 @@ export default function Module3() {
 
   const mesh = useMemo(() => {
     const act = cons.filter((c) => c.visible)
-    return buildRegionMesh(
-      act.map((c) => c.field),
-      act.map((c) => c.color),
-      bbox,
-      36,
-    )
+    return buildRegionMesh(act.map((c) => c.field), act.map((c) => c.color), bbox, 36)
   }, [cons, bbox])
 
   // Cada superficie frontera dibujada "virgen" (sin cortar por las demás),
   // como las muestra GeoGebra — estilo F(x,y,z)=0 completa dentro del viewport.
   const surfMeshes = useMemo(
-    () =>
-      showSurf
-        ? cons.filter((c) => c.visible).map((c) => buildRegionMesh([c.field], [c.color], bbox, 34))
-        : [],
+    () => (showSurf ? cons.filter((c) => c.visible).map((c) => buildRegionMesh([c.field], [c.color], bbox, 34)) : []),
     [cons, bbox, showSurf],
   )
 
   const sf = useMemo(
-    () =>
-      shadowField(
-        region.cons.map((c) => c.field),
-        info.pierce,
-        ranges.t0,
-        ranges.t1,
-      ),
+    () => shadowField(region.cons.map((c) => c.field), info.pierce, ranges.t0, ranges.t1),
     [region, info.pierce, ranges.t0, ranges.t1],
   )
   const shadowGeom = useMemo(
@@ -98,6 +89,7 @@ export default function Module3() {
 
   const pierceHit = useMemo(
     () => sweepRegion(region, info.pierce, toPoint(duv.u, duv.v, 0), ranges.t0, ranges.t1),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [region, info.pierce, duv.u, duv.v, ranges.t0, ranges.t1],
   )
 
@@ -113,8 +105,16 @@ export default function Module3() {
 
   useEffect(() => {
     if (outerRange) setOuterPos((p) => Math.min(Math.max(p, outerRange[0]), outerRange[1]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outerRange?.[0], outerRange?.[1]])
 
+  const planReq = useMemo(() => ({ kind: 'cart3' as const, raws, order }), [raws, order])
+  const { plan, pending } = usePlan(planReq)
+
+  const fitTo = (rs: RawConstraint[]) => {
+    const fit = fitBounds3D(buildRegion(compileConstraints(rs, '3d').cons).field)
+    if (fit) setBbox(fit.bbox)
+  }
   const applyPreset = (id: string) => {
     const p = PRESETS.find((q) => q.id === id && q.module === 3)
     if (!p) return
@@ -122,127 +122,90 @@ export default function Module3() {
     const pr = presetRaws(p)
     setRaws(pr)
     if (p.settings?.order) setOrder(p.settings.order)
-    if (p.bbox) {
-      setBbox({ ...DEFAULT_BBOX, ...p.bbox })
-    } else {
-      const fit = fitBounds3D(buildRegion(compileConstraints(pr, '3d').cons).field)
-      if (fit) setBbox(fit.bbox)
-    }
+    if (p.bbox) setBbox({ ...DEFAULT_BBOX, ...p.bbox })
+    else fitTo(pr)
     setUv({ u: 0.4, v: 0.4 })
-  }
-
-  const autoFit = () => {
-    const fit = fitBounds3D(region.field)
-    if (fit) setBbox(fit.bbox)
   }
   const activePreset = PRESETS.find((p) => p.id === presetId)
 
   const entry = pierceHit.entry
   const exit = pierceHit.exit
-  const arrowFrom: [number, number, number] | null =
-    entry && exit
-      ? (() => {
-          const a = toPoint(uv.u, uv.v, entry.t)
-          return [a.x, a.y, a.z]
-        })()
-      : null
-  const arrowTo: [number, number, number] | null =
-    entry && exit
-      ? (() => {
-          const a = toPoint(uv.u, uv.v, exit.t)
-          return [a.x, a.y, a.z]
-        })()
-      : null
+  const arrowFrom: [number, number, number] | null = entry && exit ? (() => { const a = toPoint(uv.u, uv.v, entry.t); return [a.x, a.y, a.z] })() : null
+  const arrowTo: [number, number, number] | null = entry && exit ? (() => { const a = toPoint(uv.u, uv.v, exit.t); return [a.x, a.y, a.z] })() : null
 
   const outerVar = info.outer
   const midVar = info.mid
-  const diffsTex = `\\textcolor{#a855f7}{d${info.pierce}}\\,\\textcolor{#0891b2}{d${info.mid}}\\,\\textcolor{#d97706}{d${info.outer}}`
-  const tex = `\\int_{${outerRange ? fmtNum(outerRange[0]) : 'a'}}^{${outerRange ? fmtNum(outerRange[1]) : 'b'}}\\!\\int_{g_1(${outerVar})}^{g_2(${outerVar})}\\!\\int_{k_1(${outerVar},${midVar})}^{k_2(${outerVar},${midVar})} f\\,${diffsTex}`
+  const genericTex = `\\int_{a}^{b}\\!\\int_{g_1(${outerVar})}^{g_2(${outerVar})}\\!\\int_{k_1}^{k_2} f\\,d${info.pierce}\\,d${midVar}\\,d${outerVar}`
 
   const warnings: string[] = []
-  if (mesh.vertexCount === 0) warnings.push('Región vacía dentro del viewport — revisá las restricciones')
-  else if (mesh.touchesBoundary) warnings.push('La región toca el borde del viewport: puede no estar acotada')
-  if (pierceHit.intervals.length > 1)
-    warnings.push(`El rayo corta ${pierceHit.intervals.length} tramos: la región no es simple en esta dirección`)
+  if (mesh.vertexCount === 0) warnings.push('No se ve ningún sólido: revisá las desigualdades o tocá “encuadrar”.')
+  else if (mesh.touchesBoundary) warnings.push('El sólido llega al borde del dibujo: puede que le falte una tapa (no está acotado).')
+  if (pierceHit.intervals.length > 1) warnings.push(`La flecha atraviesa el sólido ${pierceHit.intervals.length} veces: en este orden hay que dividirlo.`)
+  if (plan?.innerSplit) warnings.push(`Según dónde esté la flecha, entra o sale por superficies distintas: este orden necesita partir el sólido. Probá otro orden.`)
+
+  const live = [
+    shadowSweepIntervals.length ? (
+      <>
+        Corte en <V color={OUTER_C}>{outerVar}</V> = <N>{fmtNum(outerPos, 2)}</N>: <V color={MID_C}>{midVar}</V> va de{' '}
+        <N>{fmtNum(shadowSweepIntervals[0].a, 2)}</N> a <N>{fmtNum(shadowSweepIntervals[shadowSweepIntervals.length - 1].b, 2)}</N>
+      </>
+    ) : (
+      <span className="text-mute">El corte en {outerVar} = {fmtNum(outerPos, 2)} no toca la sombra.</span>
+    ),
+    entry && exit ? (
+      <>
+        Flecha en ({hAxis}, {vAxis}) = (<N>{fmtNum(uv.u, 2)}</N>, <N>{fmtNum(uv.v, 2)}</N>): <V color={INNER_C}>{info.pierce}</V> va de{' '}
+        <N>{fmtNum(entry.t, 2)}</N> a <N>{fmtNum(exit.t, 2)}</N>
+      </>
+    ) : (
+      <span className="text-mute">La flecha no atraviesa el sólido: hacé click dentro de la sombra.</span>
+    ),
+    ...(entry && exit
+      ? [
+          <span className="text-[11px] text-mute">
+            entra por <span className="text-emerald-700"><TeX tex={entry.constraint?.latex ?? '?'} /></span>
+            {'  ·  '}sale por <span className="text-rose-700"><TeX tex={exit.constraint?.latex ?? '?'} /></span>
+          </span>,
+        ]
+      : []),
+  ]
 
   return (
     <div className="flex min-h-0 flex-1">
       <Sidebar fig={3}>
-        <Section title="Ejercicios típicos">
-          <Select
-            value={PRESETS.some((p) => p.id === presetId && p.module === 3) ? presetId : ''}
-            onChange={applyPreset}
-            options={[
-              { value: '', label: '— Elegir preset —' },
-              ...PRESETS.filter((p) => p.module === 3).map((p) => ({ value: p.id, label: p.name })),
-            ]}
-          />
+        <Section title="Ejemplos">
+          <PresetPicker module={3} value={presetId} onChange={applyPreset} />
         </Section>
-        <Section title="Superficies frontera">
+        <Section title="Sólido">
           <ConstraintEditor raws={raws} setRaws={setRaws} dims="3d" />
         </Section>
         <Section title="Orden de integración">
-          <div className="grid grid-cols-2 gap-1">
-            {(Object.keys(ORDER_INFO) as IntegrationOrder3D[]).map((o) => (
-              <button
-                key={o}
-                onClick={() => setOrder(o)}
-                className={`border px-1.5 py-1.5 text-[10px] font-mono ${
-                  order === o
-                    ? 'border-cobalt bg-cobalt-50 text-ink'
-                    : 'border-line text-mute hover:border-ink hover:text-ink'
-                }`}
-              >
-                <TeX tex={ORDER_INFO[o].tex} />
-                <span className="ml-1 text-[9px] text-mute">{ORDER_INFO[o].typeLabel}</span>
-              </button>
-            ))}
-          </div>
-        </Section>
-        <Section title="Punto base de perforación">
-          <SliderRow
-            label={`${hAxis} (eje horizontal de la sombra)`}
-            value={uv.u}
-            min={ranges.u0}
-            max={ranges.u1}
-            step={(ranges.u1 - ranges.u0) / 300}
-            onChange={(u) => setUv((p) => ({ ...p, u }))}
-            fmt={fmtNum}
-          />
-          <SliderRow
-            label={`${vAxis} (eje vertical de la sombra)`}
-            value={uv.v}
-            min={ranges.v0}
-            max={ranges.v1}
-            step={(ranges.v1 - ranges.v0) / 300}
-            onChange={(v) => setUv((p) => ({ ...p, v }))}
-            fmt={fmtNum}
+          <Segmented
+            value={order}
+            onChange={setOrder}
+            options={(Object.keys(ORDER_INFO) as IntegrationOrder3D[]).map((o) => ({
+              value: o,
+              tex: ORDER_INFO[o].tex,
+              hint: `sombra en ${ORDER_INFO[o].plane}`,
+            }))}
           />
         </Section>
-        <Section title="Barrido en la sombra">
-          <SliderRow
-            label={`${outerVar} (límite exterior)`}
-            value={outerPos}
-            min={midIsH ? ranges.v0 : ranges.u0}
-            max={midIsH ? ranges.v1 : ranges.u1}
-            step={((midIsH ? ranges.v1 : ranges.u1) - (midIsH ? ranges.v0 : ranges.u0)) / 300}
-            onChange={setOuterPos}
-            fmt={fmtNum}
-            color="#d97706"
-          />
+        <Section title="Explorar">
+          <SliderRow label={`Corte en la sombra: ${outerVar} =`} value={outerPos} min={midIsH ? ranges.v0 : ranges.u0} max={midIsH ? ranges.v1 : ranges.u1} step={((midIsH ? ranges.v1 : ranges.u1) - (midIsH ? ranges.v0 : ranges.u0)) / 300} onChange={setOuterPos} fmt={(v) => fmtNum(v, 2)} color={OUTER_C} />
+          <SliderRow label={`Flecha: ${hAxis} =`} value={uv.u} min={ranges.u0} max={ranges.u1} step={(ranges.u1 - ranges.u0) / 300} onChange={(u) => setUv((p) => ({ ...p, u }))} fmt={(v) => fmtNum(v, 2)} color={INNER_C} />
+          <SliderRow label={`Flecha: ${vAxis} =`} value={uv.v} min={ranges.v0} max={ranges.v1} step={(ranges.v1 - ranges.v0) / 300} onChange={(v) => setUv((p) => ({ ...p, v }))} fmt={(v) => fmtNum(v, 2)} color={INNER_C} />
+          <p className="text-[11px] leading-snug text-mute">La flecha violeta muestra por dónde entra y sale {info.pierce}. Click en la sombra para moverla.</p>
         </Section>
-        <Section title="Visualización">
-          <SliderRow label="Opacidad del sólido" value={opacity} min={0.05} max={1} onChange={setOpacity} fmt={(v) => `${Math.round(v * 100)}%`} />
-          <Toggle checked={wire} onChange={setWire} label="Modo wireframe" />
-          <Toggle checked={showSurf} onChange={setShowSurf} label="Superficies completas (sin recortar)" />
-          <Btn onClick={autoFit} className="mt-2 w-full justify-center" title="Encuadra la escena al sólido automáticamente">
-            <Scan size={13} /> Encuadrar región
+        <Section title="Vista">
+          <SliderRow label="Transparencia del sólido" value={opacity} min={0.05} max={1} onChange={setOpacity} fmt={(v) => `${Math.round(v * 100)}%`} />
+          <Toggle checked={wire} onChange={setWire} label="Ver como malla" />
+          <Toggle checked={showSurf} onChange={setShowSurf} label="Mostrar cada superficie completa" />
+          <Btn onClick={() => fitTo(raws)} className="mt-2 w-full justify-center" title="Ajusta el dibujo al tamaño del sólido">
+            <Scan size={13} /> Encuadrar sólido
           </Btn>
-          <div className="mt-3 grid grid-cols-3 gap-1.5">
-            {(['x0', 'x1', 'y0', 'y1', 'z0', 'z1'] as const).map((k) => (
-              <NumField key={k} label={k} value={bbox[k]} onChange={(v) => setBbox({ ...bbox, [k]: v })} />
-            ))}
-          </div>
+        </Section>
+        <Section title="Avanzado" defaultOpen={false}>
+          <BoxEditor bbox={bbox} onChange={setBbox} />
         </Section>
       </Sidebar>
       <main className="flex min-w-0 flex-1 flex-col">
@@ -253,9 +216,7 @@ export default function Module3() {
               {surfMeshes.map((m, i) => (
                 <Solid key={i} mesh={m} opacity={0.22} depthBias />
               ))}
-              {arrowFrom && arrowTo && (
-                <Arrow3D from={arrowFrom} to={arrowTo} color="#a855f7" />
-              )}
+              {arrowFrom && arrowTo && <Arrow3D from={arrowFrom} to={arrowTo} color={INNER_C} />}
               {entry && exit && arrowFrom && arrowTo && (
                 <>
                   <Label3D p={[arrowFrom[0], arrowFrom[1], arrowFrom[2] - 0.18]} text={`${info.pierce}₁`} color="#16a34a" />
@@ -265,62 +226,31 @@ export default function Module3() {
             </Scene3D>
           </div>
           <div className="flex w-[340px] shrink-0 flex-col border-l border-line bg-white">
-            <PanelTitle>Sombra en plano {info.plane} · barrido {midIsH ? 'T2 (horizontal)' : 'T1 (vertical)'}</PanelTitle>
+            <PanelTitle>Sombra en el plano {info.plane}</PanelTitle>
             <div className="min-h-0 flex-1">
               <Plot2D
                 view={{ x0: ranges.u0, x1: ranges.u1, y0: ranges.v0, y1: ranges.v1 }}
                 geom={shadowGeom}
                 fill="rgba(31,59,245,0.16)"
-                sweep={{
-                  axis: midIsH ? 'h' : 'v',
-                  pos: outerPos,
-                  intervals: shadowSweepIntervals,
-                }}
+                sweep={{ axis: midIsH ? 'h' : 'v', pos: outerPos, intervals: shadowSweepIntervals }}
                 onSweep={setOuterPos}
-                marks={[{ x: uv.u, y: uv.v, color: '#a855f7' }]}
+                marks={[{ x: uv.u, y: uv.v, color: INNER_C }]}
                 onCursor={(p) => p && setUv({ u: p.x, v: p.y })}
                 clickToSet
                 axisLabels={[hAxis, vAxis]}
               />
             </div>
-            <PanelHint>Click en la sombra para posicionar la flecha 3D · arrastrar = mover la vista</PanelHint>
+            <PanelHint>Click = ubicar la flecha · arrastrar = mover · rueda = zoom</PanelHint>
           </div>
         </div>
         <LimitsDock
-          tex={tex}
-          live={[
-            ...(outerRange
-              ? [{ label: `${outerVar} ∈`, value: `[${fmtNum(outerRange[0])}, ${fmtNum(outerRange[1])}]`, color: '#d97706' }]
-              : []),
-            ...(shadowSweepIntervals.length
-              ? [
-                  {
-                    label: `${midVar} ∈`,
-                    value: `[${fmtNum(shadowSweepIntervals[0].a)}, ${fmtNum(shadowSweepIntervals[shadowSweepIntervals.length - 1].b)}]`,
-                    color: '#0891b2',
-                  },
-                ]
-              : []),
-            ...(entry && exit
-              ? [
-                  {
-                    label: `${info.pierce} ∈`,
-                    value: `[${fmtNum(entry.t)}, ${fmtNum(exit.t)}]`,
-                    color: '#a855f7',
-                  },
-                  { label: 'entra por', value: entry.constraint?.raw ?? '?', color: '#16a34a' },
-                  { label: 'sale por', value: exit.constraint?.raw ?? '?', color: '#dc2626' },
-                ]
-              : [{ label: info.pierce, value: 'el rayo no toca el sólido', color: '#94a3b8' }]),
-          ]}
+          tex={plan?.tex || genericTex}
+          status={dockStatus(plan, pending)}
+          parts={partsNote(plan, outerVar)}
+          live={live}
           warnings={warnings}
           note={activePreset?.note}
         />
-        {activePreset?.limitsTex && (
-          <div className="shrink-0 border-t border-line bg-paper px-4 py-1 text-[11px] text-mute">
-            <span className="mr-1 font-mono text-[9.5px] uppercase tracking-wider text-cobalt">referencia del TP</span> <TeX tex={activePreset.limitsTex} />
-          </div>
-        )}
       </main>
     </div>
   )

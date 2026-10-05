@@ -184,7 +184,7 @@ function AxisTicks({ bbox }: { bbox: BBox }) {
           </group>
         )
       })}
-      <Label3D p={[span * 0.05, -span * 0.05, 0]} text="0" color="#64748b" size={span * 0.045} occluded />
+      <Label3D p={[span * 0.05, -span * 0.05, 0]} text="0" color="#6b6b78" size={span * 0.045} occluded />
     </group>
   )
 }
@@ -201,7 +201,7 @@ function makeTextSprite(text: string, color: string, size: number, occluded: boo
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.lineWidth = 7
-  ctx.strokeStyle = 'rgba(241,245,249,0.95)'
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'
   ctx.strokeText(text, w / 2, 22)
   ctx.fillStyle = color
   ctx.fillText(text, w / 2, 22)
@@ -286,13 +286,13 @@ export function Scene3D({
         dpr={[1, 1.75]}
         camera={{ position: [center[0] + radius * 1.7, center[1] - radius * 2, center[2] + radius * 1.3], up: [0, 0, 1], fov: 45 }}
       >
-        <color attach="background" args={['#f1f5f9']} />
+        <color attach="background" args={['#ffffff']} />
         <ambientLight intensity={0.75} />
         <directionalLight position={[6, -4, 9]} intensity={1.4} />
         <directionalLight position={[-5, 6, -3]} intensity={0.4} />
         <AxisTicks bbox={bbox} />
         <gridHelper
-          args={[axisLen * 2, Math.max(4, Math.round(axisLen)), '#cbd5e1', '#e2e8f0']}
+          args={[axisLen * 2, Math.max(4, Math.round(axisLen)), '#d6d6de', '#eeeef2']}
           rotation={[Math.PI / 2, 0, 0]}
           position={[0, 0, 0]}
         />
@@ -303,14 +303,15 @@ export function Scene3D({
         <OrbitControls makeDefault target={center} />
         <ViewSetter api={apiRef} center={center} radius={radius} />
       </Canvas>
-      <div className="absolute right-2 top-2 flex gap-1">
-        {(['home', 'top', 'front', 'side'] as const).map((v) => (
+      <div className="absolute right-3 top-3 flex border border-ink bg-white text-[10.5px] shadow-[2px_2px_0_0_rgba(11,11,16,0.08)]">
+        {(['home', 'top', 'front', 'side'] as const).map((v, i) => (
           <button
             key={v}
-            className="rounded-md border border-slate-300 bg-white/90 px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-100"
+            className={`px-2.5 py-1 font-medium text-ink hover:bg-cobalt hover:text-white ${i ? 'border-l border-line' : ''}`}
             onClick={() => apiRef.current?.(v)}
+            title={{ home: 'Vista isométrica', top: 'Mirar desde arriba (plano XY)', front: 'Mirar de frente (plano XZ)', side: 'Mirar de costado (plano YZ)' }[v]}
           >
-            {{ home: 'Libre', top: 'Sup XY', front: 'Front XZ', side: 'Lat YZ' }[v]}
+            {{ home: '3D', top: 'XY', front: 'XZ', side: 'YZ' }[v]}
           </button>
         ))}
       </div>

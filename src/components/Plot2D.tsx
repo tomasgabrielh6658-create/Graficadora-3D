@@ -121,10 +121,10 @@ export function Plot2D(props: Props) {
 
     if (p.showGrid !== false) {
       const step = niceStep(Math.max(x1 - x0, y1 - y0))
-      ctx.strokeStyle = '#e2e8f0'
+      ctx.strokeStyle = '#efeff3'
       ctx.lineWidth = 1
-      ctx.font = '9px ui-monospace, monospace'
-      ctx.fillStyle = '#94a3b8'
+      ctx.font = '10px ui-monospace, Consolas, monospace'
+      ctx.fillStyle = '#8a8a96'
       for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) {
         const [px] = toPx(x, 0)
         ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke()
@@ -137,8 +137,8 @@ export function Plot2D(props: Props) {
         const label = (p.fmtY ?? ((v) => String(Math.round(v * 100) / 100)))(y)
         ctx.fillText(label, 3, py - 2)
       }
-      ctx.strokeStyle = '#94a3b8'
-      ctx.lineWidth = 1.2
+      ctx.strokeStyle = '#0b0b10'
+      ctx.lineWidth = 1.1
       if (y0 <= 0 && y1 >= 0) {
         const [, py] = toPx(0, 0)
         ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(w, py); ctx.stroke()
@@ -148,8 +148,8 @@ export function Plot2D(props: Props) {
         ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke()
       }
       if (p.axisLabels) {
-        ctx.fillStyle = '#475569'
-        ctx.font = 'italic 11px serif'
+        ctx.fillStyle = '#0b0b10'
+        ctx.font = 'italic 13px serif'
         ctx.fillText(p.axisLabels[0], w - 12, toPx(0, 0)[1] - 4 < 14 ? 14 : toPx(0, 0)[1] - 4)
         ctx.fillText(p.axisLabels[1], toPx(0, 0)[0] + 6, 12)
       }
@@ -157,7 +157,7 @@ export function Plot2D(props: Props) {
 
     if (p.geom || p.field) {
       const ms = p.geom ?? marchingSquares(p.field!, x0, x1, y0, y1, 150, 150)
-      ctx.fillStyle = p.fill ?? 'rgba(56,189,248,0.32)'
+      ctx.fillStyle = p.fill ?? 'rgba(31,59,245,0.16)'
       ctx.beginPath()
       for (let i = 0; i < ms.triCount; i++) {
         const t = i * 6
@@ -258,7 +258,7 @@ export function Plot2D(props: Props) {
       ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2); ctx.fill()
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke()
       if (m.label) {
-        ctx.fillStyle = '#334155'
+        ctx.fillStyle = '#0b0b10'
         ctx.font = '10px ui-monospace, monospace'
         ctx.fillText(m.label, px + 6, py - 6)
       }
@@ -266,19 +266,19 @@ export function Plot2D(props: Props) {
 
     if (p.cursor) {
       const [px, py] = toPx(p.cursor.x, p.cursor.y)
-      ctx.strokeStyle = '#0ea5e9'
+      ctx.strokeStyle = '#1f3bf5'
       ctx.lineWidth = 1.4
       ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.stroke()
       ctx.beginPath(); ctx.moveTo(px - 9, py); ctx.lineTo(px + 9, py); ctx.moveTo(px, py - 9); ctx.lineTo(px, py + 9); ctx.stroke()
     }
 
     p.extras?.(ctx, toPx)
-    ctx.fillStyle = '#94a3b8'
-    ctx.font = '9px ui-sans-serif, system-ui'
+    ctx.fillStyle = '#a0a0ab'
+    ctx.font = '9.5px ui-monospace, Consolas, monospace'
     ctx.textAlign = 'right'
     ctx.fillText('rueda = zoom · arrastrar = mover', w - 6, h - 6)
     ctx.textAlign = 'left'
-    ctx.strokeStyle = '#cbd5e1'
+    ctx.strokeStyle = '#e4e4ea'
     ctx.strokeRect(0.5, 0.5, w - 1, h - 1)
     void toMath
   }

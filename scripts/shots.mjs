@@ -56,7 +56,7 @@ async function toggleSurf() {
 
 const shot = (name) => page.screenshot({ path: `${OUT}/${name}.png` })
 
-await page.goto('http://localhost:5173', { waitUntil: 'networkidle0' })
+await page.goto(process.env.SHOTS_URL ?? 'http://localhost:5173', { waitUntil: 'networkidle0' })
 await sleep(1000)
 
 // Módulo 1

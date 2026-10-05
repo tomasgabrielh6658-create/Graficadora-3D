@@ -1,7 +1,37 @@
 import { useEffect, useRef, useState } from 'react'
 import { Maximize, Minus, Plus } from 'lucide-react'
 import type { Interval } from '../types'
+import { LOW_POWER } from '../lib/lowpower'
 import { marchingSquares, type MSResult } from '../lib/marchingSquares'
+
+// Densidad del marching squares: en dispositivos débiles baja ~2x el cómputo.
+const MS_FILL = LOW_POWER ? 100 : 150
+const MS_CURVE = LOW_POWER ? 110 : 160
+// La capa estática cubre STATIC_MARGIN× la vista visible: pans y zooms chicos
+// quedan dentro del bitmap y se blitean sin recalcular el marching squares.
+const STATIC_MARGIN = 1.5
+
+function expand(v: Props['view'], m: number): Props['view'] {
+  const cx = (v.x0 + v.x1) / 2
+  const cy = (v.y0 + v.y1) / 2
+  const hx = ((v.x1 - v.x0) * m) / 2
+  const hy = ((v.y1 - v.y0) * m) / 2
+  return { x0: cx - hx, x1: cx + hx, y0: cy - hy, y1: cy + hy }
+}
+
+/** ¿La vista actual sigue cubierta por la capa estática? (centro cerca y escala similar) */
+function covered(st: { view: Props['view'] } | null, v: Props['view']): boolean {
+  if (!st) return false
+  const sv = st.view
+  const sw = sv.x1 - sv.x0
+  const sh = sv.y1 - sv.y0
+  if (Math.abs((v.x0 + v.x1) / 2 - (sv.x0 + sv.x1) / 2) > sw * 0.25) return false
+  if (Math.abs((v.y0 + v.y1) / 2 - (sv.y0 + sv.y1) / 2) > sh * 0.25) return false
+  const cw = v.x1 - v.x0
+  const ch = v.y1 - v.y0
+  if (cw < sw * 0.5 || cw > sw * 1.1 || ch < sh * 0.5 || ch > sh * 1.1) return false
+  return true
+}
 
 export interface CurveSpec {
   f: (x: number, y: number) => number
@@ -76,6 +106,10 @@ export function Plot2D(props: Props) {
   const staticDeps = useRef<readonly unknown[] | null>(null)
   const interacting = useRef(false)
   const settleTimer = useRef(0)
+  // Tras soltar el arrastre la capa se redibuja ~50 ms después: el blit cubre
+  // el gap y la UI no se congela en el instante del release.
+  const pendingCrisp = useRef(false)
+  const crispTimer = useRef(0)
   const committedRef = useRef(props.view)
   committedRef.current = props.view
   // Los eventos de puntero pueden llegar a >120 Hz: se colapsan a uno por frame
@@ -128,7 +162,7 @@ export function Plot2D(props: Props) {
       st = { cv: document.createElement('canvas'), view: v, w, h, dpr }
       staticRef.current = st
     }
-    st.view = { x0: v.x0, x1: v.x1, y0: v.y0, y1: v.y1 }
+    st.view = { ...v }
     st.cv.width = Math.round(w * dpr)
     st.cv.height = Math.round(h * dpr)
     const c2 = st.cv.getContext('2d')
@@ -144,7 +178,9 @@ export function Plot2D(props: Props) {
       h - (oy + (y - v.y0) * s),
     ]
     if (p.geom || p.field) {
-      const ms = p.geom ?? marchingSquares(p.field!, v.x0, v.x1, v.y0, v.y1, 150, 150)
+      const ms =
+        p.geom ??
+        marchingSquares(p.field!, v.x0, v.x1, v.y0, v.y1, Math.round(MS_FILL * STATIC_MARGIN), Math.round(MS_FILL * STATIC_MARGIN))
       c2.fillStyle = p.fill ?? 'rgba(31,59,245,0.16)'
       c2.beginPath()
       for (let i = 0; i < ms.triCount; i++) {
@@ -160,7 +196,7 @@ export function Plot2D(props: Props) {
       c2.fill()
     }
     for (const c of p.curves ?? []) {
-      const ms = marchingSquares(c.f, v.x0, v.x1, v.y0, v.y1, 160, 160)
+      const ms = marchingSquares(c.f, v.x0, v.x1, v.y0, v.y1, Math.round(MS_CURVE * STATIC_MARGIN), Math.round(MS_CURVE * STATIC_MARGIN))
       c2.strokeStyle = c.color
       c2.globalAlpha = 0.28
       c2.lineWidth = 1.2
@@ -261,18 +297,17 @@ export function Plot2D(props: Props) {
       }
     }
 
-    // Capa estática: región + curvas ya rasterizadas; durante el arrastre se
-    // reutiliza la imagen trasladada/escalada sin recalcular marching squares.
+    // Capa estática: región + curvas rasterizadas sobre una vista 1.5x más
+    // grande que la visible — los pans/zooms chicos quedan cubiertos por el
+    // blit y no recalculan nada; solo se re-renderiza al salir de la zona.
     const deps = [p.field, p.geom, p.curves, p.fill]
     const prevDeps = staticDeps.current
     const depsChanged = !prevDeps || deps.some((d, i) => d !== prevDeps[i])
     if (depsChanged) staticDeps.current = deps
     let st = staticRef.current
     const sizeOk = !!st && st.w === w && st.h === h && st.dpr === dpr
-    const sameView =
-      !!st && st.view.x0 === x0 && st.view.x1 === x1 && st.view.y0 === y0 && st.view.y1 === y1
-    if (!sizeOk || depsChanged || (!interacting.current && !sameView)) {
-      renderStatic(p, p.view, w, h, dpr)
+    if (!sizeOk || depsChanged || (!interacting.current && !pendingCrisp.current && !covered(st, p.view))) {
+      renderStatic(p, expand(p.view, STATIC_MARGIN), w, h, dpr)
       st = staticRef.current
     }
     if (st) {
@@ -282,6 +317,11 @@ export function Plot2D(props: Props) {
       const oyS = (st.h - sS * (sv.y1 - sv.y0)) / 2
       const k = s / sS
       ctx.save()
+      // recortar al rectángulo de la vista: el margen extra de la capa (1.5x)
+      // no debe derramar en el letterbox del canvas
+      ctx.beginPath()
+      ctx.rect(ox, oy, s * (x1 - x0), s * (y1 - y0))
+      ctx.clip()
       ctx.translate(ox - k * oxS + s * (sv.x0 - x0), k * oyS - oy + s * (y0 - sv.y0) + h * (1 - k))
       ctx.scale(k, k)
       ctx.drawImage(st.cv, 0, 0, st.w, st.h)
@@ -376,6 +416,9 @@ export function Plot2D(props: Props) {
       setPanView(queuedView.current)
       queuedView.current = null
     }
+    // Blit inmediato en la vista final; el re-render nítido se agenda ~50 ms
+    // después para no bloquear el primer input tras soltar.
+    pendingCrisp.current = true
     draw()
     const p = propsRef.current
     const v = p.view
@@ -383,6 +426,11 @@ export function Plot2D(props: Props) {
     if (p.onView && (v.x0 !== cv.x0 || v.x1 !== cv.x1 || v.y0 !== cv.y0 || v.y1 !== cv.y1)) {
       p.onView(v)
     }
+    window.clearTimeout(crispTimer.current)
+    crispTimer.current = window.setTimeout(() => {
+      pendingCrisp.current = false
+      draw()
+    }, 50)
   }
   // Marca "interactuando" y pospone el settle (rueda del mouse / botones).
   const poke = () => {
@@ -439,6 +487,7 @@ export function Plot2D(props: Props) {
     return () => {
       canvas.removeEventListener('wheel', onWheel)
       window.clearTimeout(settleTimer.current)
+      window.clearTimeout(crispTimer.current)
       cancelAnimationFrame(rafPending.current)
     }
   }, [])
@@ -475,7 +524,9 @@ export function Plot2D(props: Props) {
   const home = () => {
     queuedView.current = null
     interacting.current = false
+    pendingCrisp.current = false
     window.clearTimeout(settleTimer.current)
+    window.clearTimeout(crispTimer.current)
     setPanView(null)
     props.onHome?.()
   }

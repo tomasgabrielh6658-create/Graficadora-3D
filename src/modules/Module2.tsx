@@ -52,16 +52,27 @@ export default function Module2() {
   const { cons } = useCompiled(raws, '2d')
   const region = useMemo(() => buildRegion(cons), [cons])
 
+  // rMax/uvMax se calculan sobre la caja de la región, NO sobre la cámara:
+  // si dependieran de `view`, cada pan/zoom reconstruiría T y recalcularía
+  // todo el plano uv (marching squares + barrido de ángulos) — era el lag.
+  const regionView = useMemo(
+    () => fitBounds2D((x, y) => region.field(x, y, 0))?.view ?? DEFAULT_VIEW,
+    [region],
+  )
+
   const rMax = useMemo(() => {
     const corners = [
-      Math.hypot(view.x0, view.y0), Math.hypot(view.x1, view.y0),
-      Math.hypot(view.x0, view.y1), Math.hypot(view.x1, view.y1),
+      Math.hypot(regionView.x0, regionView.y0), Math.hypot(regionView.x1, regionView.y0),
+      Math.hypot(regionView.x0, regionView.y1), Math.hypot(regionView.x1, regionView.y1),
     ]
     const div = kind === 'elliptic' ? Math.min(Math.abs(ea) || 1, Math.abs(eb) || 1) : 1
     return (Math.max(...corners) / div) * 1.1 + 0.5
-  }, [view, kind, ea, eb])
+  }, [regionView, kind, ea, eb])
 
-  const uvMax = Math.max(Math.abs(view.x0), Math.abs(view.x1), Math.abs(view.y0), Math.abs(view.y1)) * 1.2
+  const uvMax = Math.max(
+    Math.abs(regionView.x0), Math.abs(regionView.x1),
+    Math.abs(regionView.y0), Math.abs(regionView.y1),
+  ) * 1.2
 
   const customErrRef = useRef<string | null>(null)
   const T: Transform2D = useMemo(() => {

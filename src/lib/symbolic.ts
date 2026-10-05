@@ -125,10 +125,38 @@ export function exactConstant(v: number, tol = 1e-6): string | null {
       }
     }
   }
+  // k ± p·√s/q: bordes de objetos desplazados (1−√3, 2+√2/2…)
+  const surdPart = (rem: number): { s: string; v: number; cx: number } | null => {
+    for (const s of SURDS) {
+      const root = Math.sqrt(s)
+      for (let q = 1; q <= 4; q++) {
+        const p = Math.round((rem * q) / root)
+        if (p > 0 && p <= 12 && gcd(p, q) === 1) {
+          const v = (p * root) / q
+          if (Math.abs(rem - v) < t) {
+            const num = p === 1 ? `sqrt(${s})` : `${p}*sqrt(${s})`
+            return { s: q === 1 ? num : `${num}/${q}`, v, cx: 2 + q / 100 }
+          }
+        }
+      }
+    }
+    return null
+  }
+  for (let k = Math.floor(a - 4); k <= Math.ceil(a + 4); k++) {
+    if (k === 0) continue
+    const rem = Math.abs(a - k)
+    if (rem < t || Math.abs(rem - Math.round(rem)) < t) continue
+    const sp = surdPart(rem)
+    if (sp) {
+      const e = a >= k ? `${k}+${sp.s}` : `${k}-${sp.s}`
+      add(e, k + Math.sign(a - k) * sp.v, 4 + sp.cx)
+    }
+  }
   if (!found.length) return null
   const minErr = Math.min(...found.map((f) => f.err))
   const best = found.filter((f) => f.err <= minErr * 4 + 1e-12).sort((x, y) => x.cx - y.cx)[0]
-  return best.s === '0' ? '0' : `${sign}${best.s}`
+  const body = sign && /[+-]/.test(best.s) ? `(${best.s})` : best.s
+  return best.s === '0' ? '0' : `${sign}${body}`
 }
 
 function gcd(a: number, b: number): number {
@@ -255,6 +283,8 @@ export function prettyTex(n: MathNode): string {
     .replace(/\\mathrm\{([a-z]+)\}/g, '\\$1')
     .replace(/\\left\(/g, '(')
     .replace(/\\right\)/g, ')')
+    .replace(/\{\s+/g, '{')
+    .replace(/\s+\}/g, '}')
 }
 
 // --- Despeje ------------------------------------------------------------------
@@ -462,6 +492,7 @@ export function shadowCandidates(raws: string[], pierce: string, mid: string, su
     }
   }
   const surf: MathNode[] = []
+  const surfF: MathNode[] = []
   for (const raw of raws) {
     let F = boundaryNode(raw)
     if (!F) continue
@@ -470,6 +501,26 @@ export function shadowCandidates(raws: string[], pierce: string, mid: string, su
       for (const s of solveFor(F, mid)) push(s)
     } else {
       surf.push(...solveFor(F, pierce))
+      surfF.push(F)
+    }
+  }
+  // "Ecuador" de cada superficie cuadrática en la perforada: la sombra termina
+  // donde el discriminante se anula (una sola esfera proyecta su círculo).
+  for (const F of surfF) {
+    try {
+      const vars = freeVars(F)
+      if (numericDegree(F, pierce, vars) !== 2) continue
+      const others = vars.filter((w) => w !== pierce)
+      const d1 = derivative(F, pierce)
+      const d2 = derivative(d1, pierce)
+      const a2 = constantFold(safeSimplify(parse(`(${d2.toString()}) / 2`)), vars)
+      if (isZero(a2, vars)) continue
+      const a1 = constantFold(safeSimplify(substitute(d1, { [pierce]: '0' })), others)
+      const a0 = constantFold(safeSimplify(substitute(F, { [pierce]: '0' })), others)
+      const disc = safeSimplify(parse(`(${a1.toString()})^2 - 4 * (${a2.toString()}) * (${a0.toString()})`))
+      for (const s of solveFor(disc, mid)) push(s)
+    } catch {
+      /* superficie rara: quedan los otros candidatos */
     }
   }
   for (let i = 0; i < surf.length; i++) {

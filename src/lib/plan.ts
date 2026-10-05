@@ -91,14 +91,109 @@ export function segment(
   return res
 }
 
+type Described = { tex: string; exact: boolean; f: (s: Scope) => number } | null
+
+/** Raíz de g cerca de c por cambio de signo; null si no cruza. */
+function rootOf(g: (w: number) => number, c: number, reach: number): number | null {
+  let a = c - reach
+  let b = c + reach
+  let fa = g(a)
+  const fb = g(b)
+  if (!Number.isFinite(fa) || !Number.isFinite(fb) || fa * fb > 0) return null
+  for (let i = 0; i < 60; i++) {
+    const m = (a + b) / 2
+    const fm = g(m)
+    if (fa * fm <= 0) b = m
+    else {
+      a = m
+      fa = fm
+    }
+  }
+  return (a + b) / 2
+}
+
+/** Punto de tangencia: minimiza |g| cerca de c; null si no se acerca a 0. */
+function touchOf(g: (w: number) => number, c: number, reach: number): number | null {
+  let a = c - reach
+  let b = c + reach
+  for (let i = 0; i < 60; i++) {
+    const m1 = a + (b - a) / 3
+    const m2 = b - (b - a) / 3
+    if (g(m1) <= g(m2)) b = m2
+    else a = m1
+  }
+  const r = (a + b) / 2
+  return g(r) < Math.max(reach * 1e-2, 1e-7) ? r : null
+}
+
+/**
+ * Ajusta el corte entre tramos vecinos. La grilla deja el corte corrido hasta
+ * el nivel de la tolerancia (2.2347 en vez de √5): una vez identificadas las
+ * curvas de borde, el corte exacto es donde se igualan — o donde dos tramos
+ * vecinos se tocan (corona: los dos intervalos se fusionan).
+ */
+function refineCuts<T extends { a: number; b: number; from: Lim; to: Lim }>(
+  groups: T[][],
+  bound: (p: T, side: 'lo' | 'hi') => Described,
+  sc: (w: number) => Scope,
+  reach: number,
+  scale: number,
+): void {
+  for (let i = 0; i < groups.length - 1; i++) {
+    const A = groups[i]
+    const B = groups[i + 1]
+    const cut = B[0]?.a ?? A[0]?.b
+    if (cut === undefined || !A.length || !B.length) continue
+    let best: number | null = null
+    if (A.length === B.length) {
+      outer: for (const side of ['hi', 'lo'] as const) {
+        for (let k = 0; k < A.length; k++) {
+          const fa = bound(A[k], side)
+          const fb = bound(B[k], side)
+          if (!fa || !fb || fa.tex === fb.tex) continue
+          const g = (w: number) => fa.f(sc(w)) - fb.f(sc(w))
+          const r = rootOf(g, cut, reach) ?? touchOf((w) => Math.abs(g(w)), cut, reach)
+          if (r !== null) {
+            best = r
+            break outer
+          }
+        }
+      }
+    } else {
+      const L = A.length > B.length ? A : B
+      for (let k = 0; k + 1 < L.length; k++) {
+        const hi = bound(L[k], 'hi')
+        const lo = bound(L[k + 1], 'lo')
+        if (!hi || !lo) continue
+        const r = touchOf((w) => Math.abs(hi.f(sc(w)) - lo.f(sc(w))), cut, reach)
+        if (r !== null) {
+          best = r
+          break
+        }
+      }
+    }
+    if (best !== null) {
+      for (const p of A) {
+        p.b = best
+        p.to = snapLim(best, scale)
+      }
+      for (const p of B) {
+        p.a = best
+        p.from = snapLim(best, scale)
+      }
+    }
+  }
+}
+
 /**
  * Planteo de dos niveles: ∫_{from}^{to} ∫_{lo(w)}^{hi(w)}.
- * Se parte el rango exterior donde cambia la curva de entrada o de salida.
+ * Se parte el rango exterior donde cambia la curva de entrada o de salida, y
+ * un corte con varios intervalos (coronas, anillos) genera una integral por tramo.
  */
 export function plan2(o: {
   searchLo: number
   searchHi: number
-  slice: (w: number) => Slice | null
+  slice: (w: number) => Slice[]
   cands: Candidate[]
   outerVar: string
   innerSpan: number
@@ -106,29 +201,37 @@ export function plan2(o: {
   periodic?: boolean
 }): Piece2[] {
   const key = (w: number) => {
-    const s = o.slice(w)
-    return s ? `${s.ka}|${s.kb}` : null
+    const iv = o.slice(w)
+    return iv.length ? iv.map((s) => `${s.ka}|${s.kb}`).join(';') : null
   }
   const segs = segment(key, o.searchLo, o.searchHi, 96, o.periodic)
   const scale = o.outerScale ?? o.searchHi - o.searchLo
   const tol = Math.max(o.innerSpan * 2e-4, 1e-6)
   const sc = (w: number): Scope => ({ [o.outerVar]: w })
   const step = (o.searchHi - o.searchLo) / 96
-  return segs.map((sg, i) => {
+  const groups = segs.map((sg, i) => {
     const pts = SAMPLES.map((f) => sg.a + (sg.b - sg.a) * f)
-    const sl = pts.map((w) => ({ w, s: o.slice(w) })).filter((p) => p.s) as { w: number; s: Slice }[]
-    const lo = describe(sl.map((p) => ({ s: sc(p.w), value: p.s.a })), o.cands, tol)
-    const hi = describe(sl.map((p) => ({ s: sc(p.w), value: p.s.b })), o.cands, tol)
-    let { a, b } = sg
-    // En un extremo "en punta" el corte tiende a ancho 0 y el muestreo no llega:
-    // se resuelve hi(w) = lo(w) con las fórmulas ya identificadas.
-    if (lo && hi) {
-      const gap = (w: number) => hi.f(sc(w)) - lo.f(sc(w))
-      if (i === 0 || segs[i - 1].b < sg.a - step * 1e-3) a = pinch(gap, a, -1, step * 3) ?? a
-      if (i === segs.length - 1 || segs[i + 1].a > sg.b + step * 1e-3) b = pinch(gap, b, 1, step * 3) ?? b
+    const lists = pts.map((w) => ({ w, iv: o.slice(w) })).filter((p) => p.iv.length)
+    const K = Math.max(1, ...lists.map((p) => p.iv.length))
+    const pieces: Piece2[] = []
+    for (let k = 0; k < K; k++) {
+      const sl = lists.map((p) => ({ w: p.w, s: p.iv[k] })).filter((p) => p.s) as { w: number; s: Slice }[]
+      const lo = describe(sl.map((p) => ({ s: sc(p.w), value: p.s.a })), o.cands, tol)
+      const hi = describe(sl.map((p) => ({ s: sc(p.w), value: p.s.b })), o.cands, tol)
+      let { a, b } = sg
+      // En un extremo "en punta" el corte tiende a ancho 0 y el muestreo no llega:
+      // se resuelve hi(w) = lo(w) con las fórmulas ya identificadas.
+      if (lo && hi) {
+        const gap = (w: number) => hi.f(sc(w)) - lo.f(sc(w))
+        if (i === 0 || segs[i - 1].b < sg.a - step * 1e-3) a = pinch(gap, a, -1, step * 3) ?? a
+        if (i === segs.length - 1 || segs[i + 1].a > sg.b + step * 1e-3) b = pinch(gap, b, 1, step * 3) ?? b
+      }
+      pieces.push({ a, b, from: snapLim(a, scale), to: snapLim(b, scale), lo, hi })
     }
-    return { a, b, from: snapLim(a, scale), to: snapLim(b, scale), lo, hi }
+    return pieces
   })
+  refineCuts(groups, (p, s) => (s === 'lo' ? p.lo : p.hi) as Described, sc, step * 3, scale)
+  return groups.flat()
 }
 
 /**
@@ -164,8 +267,8 @@ function matchKey(v: number, s: Scope, cands: Candidate[], tol: number): string 
 export function plan3(o: {
   searchLo: number
   searchHi: number
-  midSlice: (w: number) => { a: number; b: number } | null
-  innerSlice: (w: number, m: number) => Slice | null
+  midSlice: (w: number) => { a: number; b: number }[]
+  innerSlice: (w: number, m: number) => Slice[]
   midCands: Candidate[]
   innerCands: Candidate[]
   outerVar: string
@@ -178,49 +281,59 @@ export function plan3(o: {
   const tolM = Math.max(o.midSpan * 5e-4, 1e-6)
   const tolI = Math.max(o.innerSpan * 2e-4, 1e-6)
   const key = (w: number) => {
-    const s = o.midSlice(w)
-    if (!s) return null
+    const iv = o.midSlice(w)
+    if (!iv.length) return null
     const sc = { [o.outerVar]: w }
-    return `${matchKey(s.a, sc, o.midCands, tolM)}|${matchKey(s.b, sc, o.midCands, tolM)}`
+    return iv.map((v) => `${matchKey(v.a, sc, o.midCands, tolM)}|${matchKey(v.b, sc, o.midCands, tolM)}`).join(';')
   }
   const segs = segment(key, o.searchLo, o.searchHi, 72, o.periodic)
   const scale = o.outerScale ?? o.searchHi - o.searchLo
   let innerSplit = false
   const step = (o.searchHi - o.searchLo) / 72
-  const pieces = segs.map((sg, i) => {
+  const groups = segs.map((sg, i) => {
     const pts = SAMPLES.map((f) => sg.a + (sg.b - sg.a) * f)
-    const mids = pts.map((w) => ({ w, s: o.midSlice(w) })).filter((p) => p.s) as { w: number; s: { a: number; b: number } }[]
+    const mids = pts.map((w) => ({ w, iv: o.midSlice(w) })).filter((p) => p.iv.length)
     const scO = (w: number): Scope => ({ [o.outerVar]: w })
-    const inner: { s: Scope; lo: number; hi: number; k: string }[] = []
-    for (const p of mids.filter((_, i) => i % 2 === 0)) {
-      for (const f of [0.2, 0.5, 0.8]) {
-        const m = p.s.a + (p.s.b - p.s.a) * f
-        const sl = o.innerSlice(p.w, m)
-        if (sl) inner.push({ s: { [o.outerVar]: p.w, [o.midVar]: m }, lo: sl.a, hi: sl.b, k: `${sl.ka}|${sl.kb}` })
+    const K = Math.max(1, ...mids.map((p) => p.iv.length))
+    const pieces: Piece3[] = []
+    for (let k = 0; k < K; k++) {
+      const sl = mids.map((p) => ({ w: p.w, s: p.iv[k] })).filter((p) => p.s) as { w: number; s: { a: number; b: number } }[]
+      const inner: { s: Scope; lo: number; hi: number; k: string }[] = []
+      for (const p of sl.filter((_, j) => j % 2 === 0)) {
+        for (const f of [0.2, 0.5, 0.8]) {
+          const m = p.s.a + (p.s.b - p.s.a) * f
+          const iv = o.innerSlice(p.w, m)
+          if (iv.length > 1) innerSplit = true
+          const s0 = iv[0]
+          if (s0) inner.push({ s: { [o.outerVar]: p.w, [o.midVar]: m }, lo: s0.a, hi: s0.b, k: `${s0.ka}|${s0.kb}` })
+        }
       }
+      const same = inner.every((q) => q.k === inner[0]?.k)
+      if (!same) innerSplit = true
+      const lo = describe(sl.map((p) => ({ s: scO(p.w), value: p.s.a })), o.midCands, tolM)
+      const hi = describe(sl.map((p) => ({ s: scO(p.w), value: p.s.b })), o.midCands, tolM)
+      let { a, b } = sg
+      if (lo && hi) {
+        const gap = (w: number) => hi.f(scO(w)) - lo.f(scO(w))
+        if (i === 0 || segs[i - 1].b < sg.a - step * 1e-3) a = pinch(gap, a, -1, step * 3) ?? a
+        if (i === segs.length - 1 || segs[i + 1].a > sg.b + step * 1e-3) b = pinch(gap, b, 1, step * 3) ?? b
+      }
+      pieces.push({
+        a,
+        b,
+        from: snapLim(a, scale),
+        to: snapLim(b, scale),
+        lo,
+        hi,
+        inLo: same ? describe(inner.map((q) => ({ s: q.s, value: q.lo })), o.innerCands, tolI) : null,
+        inHi: same ? describe(inner.map((q) => ({ s: q.s, value: q.hi })), o.innerCands, tolI) : null,
+      })
     }
-    const same = inner.every((q) => q.k === inner[0]?.k)
-    if (!same) innerSplit = true
-    const lo = describe(mids.map((p) => ({ s: scO(p.w), value: p.s.a })), o.midCands, tolM)
-    const hi = describe(mids.map((p) => ({ s: scO(p.w), value: p.s.b })), o.midCands, tolM)
-    let { a, b } = sg
-    if (lo && hi) {
-      const gap = (w: number) => hi.f(scO(w)) - lo.f(scO(w))
-      if (i === 0 || segs[i - 1].b < sg.a - step * 1e-3) a = pinch(gap, a, -1, step * 3) ?? a
-      if (i === segs.length - 1 || segs[i + 1].a > sg.b + step * 1e-3) b = pinch(gap, b, 1, step * 3) ?? b
-    }
-    return {
-      a,
-      b,
-      from: snapLim(a, scale),
-      to: snapLim(b, scale),
-      lo,
-      hi,
-      inLo: same ? describe(inner.map((q) => ({ s: q.s, value: q.lo })), o.innerCands, tolI) : null,
-      inHi: same ? describe(inner.map((q) => ({ s: q.s, value: q.hi })), o.innerCands, tolI) : null,
-    }
+    return pieces
   })
-  return { pieces, innerSplit }
+  const scO = (w: number): Scope => ({ [o.outerVar]: w })
+  refineCuts(groups, (p, s) => (s === 'lo' ? p.lo : p.hi) as Described, scO, step * 3, scale)
+  return { pieces: groups.flat(), innerSplit }
 }
 
 /**

@@ -4,7 +4,7 @@ import { compileConstraints } from './useConstraints'
 import { fitBounds2D, fitBounds3D } from './autofit'
 import { intervalsLe0 } from './roots'
 import { sweepRegion } from './sweeps'
-import { allExact, plan2, plan3, rayMin, span, tex2, tex3, type Piece2, type Piece3, type Slice } from './plan'
+import { allExact, plan2, plan3, rayMin, tex2, tex3, type Piece2, type Piece3 } from './plan'
 import { candidatesFor, constTex, exactConstant, prettyTex, shadowCandidates } from './symbolic'
 import { ORDER_INFO, type Axis, type IntegrationOrder3D } from '../types'
 import type { RawConstraint } from './presets'
@@ -45,9 +45,6 @@ function regionOf(raws: RawConstraint[], dims: '2d' | '3d'): Region {
   return buildRegion(compileConstraints(raws, dims).cons)
 }
 
-const sliceFrom = (iv: { a: number; b: number }[], ka: string, kb: string): Slice | null =>
-  iv.length ? { a: iv[0].a, b: iv[iv.length - 1].b, ka, kb } : null
-
 const constWeight = (v: number, rest: string) => {
   const e = exactConstant(v, 1e-9)
   const t = e === null ? String(Math.round(v * 1000) / 1000) : constTex(e)
@@ -81,7 +78,12 @@ function planCart2(req: Extract<PlanReq, { kind: 'cart2' }>): PlanRes {
     searchHi: oHi,
     slice: (w) => {
       const h = sweepRegion(region, inner, { x: w, y: w, z: 0 }, iLo, iHi)
-      return sliceFrom(h.intervals, h.entry?.constraint?.id ?? '?', h.exit?.constraint?.id ?? '?')
+      const at = (t: number) => {
+        const q = { x: w, y: w, z: 0 }
+        q[inner] = t
+        return region.dominant(q.x, q.y, q.z)?.id ?? '?'
+      }
+      return h.intervals.map((iv) => ({ a: iv.a, b: iv.b, ka: at(iv.a), kb: at(iv.b) }))
     },
     cands: candidatesFor(rawStrings(req.raws), inner),
     outerVar: outer,
@@ -155,7 +157,7 @@ function planCV2(req: Extract<PlanReq, { kind: 'cv2' }>): PlanRes {
     searchHi: uRange[1],
     slice: (u) => {
       const iv = intervalsLe0((v) => g(u, v), vRange[0], vRange[1], 400)
-      return iv.length ? sliceFrom(iv, key(u, iv[0].a), key(u, iv[iv.length - 1].b)) : null
+      return iv.map((s) => ({ a: s.a, b: s.b, ka: key(u, s.a), kb: key(u, s.b) }))
     },
     cands: candidatesFor(raws, vVar, subs),
     outerVar: uVar,
@@ -223,13 +225,18 @@ function planCart3(req: Extract<PlanReq, { kind: 'cart3' }>): PlanRes {
     searchLo: oLo,
     searchHi: oHi,
     midSlice: (w) =>
-      span((m) => rayMin((t) => {
+      intervalsLe0((m) => rayMin((t) => {
         const q = pt(w, m, t)
         return region.field(q.x, q.y, q.z)
       }, pLo, pHi), mLo, mHi, 120),
     innerSlice: (w, m) => {
       const h = sweepRegion(region, info.pierce, pt(w, m, 0), pLo, pHi)
-      return sliceFrom(h.intervals, h.entry?.constraint?.id ?? '?', h.exit?.constraint?.id ?? '?')
+      return h.intervals.map((iv) => ({
+        a: iv.a,
+        b: iv.b,
+        ka: region.dominant(...(Object.values(pt(w, m, iv.a)) as [number, number, number]))?.id ?? '?',
+        kb: region.dominant(...(Object.values(pt(w, m, iv.b)) as [number, number, number]))?.id ?? '?',
+      }))
     },
     midCands: shadowCandidates(raws, info.pierce, info.mid),
     innerCands: candidatesFor(raws, info.pierce),
@@ -273,13 +280,14 @@ function planCS3(req: Extract<PlanReq, { kind: 'cs3' }>): PlanRes {
   const res = plan3({
     searchLo: 0,
     searchHi: TAU,
-    midSlice: (th) => span((m) => rayMin((t) => region.field(...pt(th, m, t)), pLo, pHi), mLo, mHi, 120),
-    innerSlice: (th, m) => {
-      const iv = intervalsLe0((t) => region.field(...pt(th, m, t)), pLo, pHi, 300)
-      if (!iv.length) return null
-      const ta = iv[0].a, tb = iv[iv.length - 1].b
-      return sliceFrom(iv, origin(ta) ? 'O' : region.dominant(...pt(th, m, ta))?.id ?? '?', region.dominant(...pt(th, m, tb))?.id ?? '?')
-    },
+    midSlice: (th) => intervalsLe0((m) => rayMin((t) => region.field(...pt(th, m, t)), pLo, pHi), mLo, mHi, 120),
+    innerSlice: (th, m) =>
+      intervalsLe0((t) => region.field(...pt(th, m, t)), pLo, pHi, 300).map((iv) => ({
+        a: iv.a,
+        b: iv.b,
+        ka: origin(iv.a) ? 'O' : region.dominant(...pt(th, m, iv.a))?.id ?? '?',
+        kb: region.dominant(...pt(th, m, iv.b))?.id ?? '?',
+      })),
     midCands: shadowCandidates(raws, pv, mv, subs),
     innerCands: candidatesFor(raws, pv, subs),
     outerVar: 'theta',

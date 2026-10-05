@@ -62,6 +62,9 @@ export function fitBounds3D(
 ): FitResult | null {
   let box = { ...search }
   let last = scan3D(field, box, n)
+  // Una región chica puede caer entre los puntos de la grilla gruesa
+  // (p. ej. un tetraedro de lado ~1 en la caja [-10,10]³): se reintenta fino.
+  if (!last.found) last = scan3D(field, box, 80)
   if (!last.found) return null
   // Pasadas de refinamiento: la grilla gruesa puede subestimar extremos finos,
   // así que se re-escanea dentro del bbox acolchado. Si algún lado sigue
@@ -133,6 +136,7 @@ export function fitBounds2D(
 ): FitResult2D | null {
   let box = { ...search }
   let last = scan2D(field, box, n)
+  if (!last.found) last = scan2D(field, box, 180)
   if (!last.found) return null
   for (let iter = 0; iter < 4; iter++) {
     box = { ...last.view }

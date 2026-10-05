@@ -148,7 +148,7 @@ export function NumField({
         type="number"
         step={step}
         className="w-full min-w-0 bg-white px-1.5 py-1 text-[11px] outline-none"
-        value={value}
+        value={Math.round(value * 1000) / 1000}
         onChange={(e) => onChange(Number(e.target.value))}
       />
     </label>

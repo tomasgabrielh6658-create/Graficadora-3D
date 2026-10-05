@@ -83,7 +83,7 @@ export default function App() {
             </div>
           </div>
         </div>
-        <nav className="flex items-stretch">
+        <nav className="flex items-stretch overflow-x-auto">
           {TABS.map((t) => {
             const active = mod === t.id
             return (
@@ -97,7 +97,7 @@ export default function App() {
               >
                 <span className={`font-mono text-[10px] ${active ? 'text-cobalt' : ''}`}>0{t.id}</span>
                 <span className={`font-serif text-sm ${active ? 'text-cobalt' : ''}`}>{t.group}</span>
-                {t.label}
+                <span className="hidden sm:inline">{t.label}</span>
                 {active && <span className="absolute inset-x-0 -bottom-px h-[3px] bg-cobalt" />}
               </button>
             )

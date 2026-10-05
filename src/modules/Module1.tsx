@@ -98,7 +98,7 @@ export default function Module1() {
     : [<span className="text-mute">Mové la recta de corte hasta que toque la región.</span>]
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-visible">
       <Sidebar fig={1}>
         <Section title="Ejemplos">
           <PresetPicker module={1} value={presetId} onChange={applyPreset} />
@@ -132,7 +132,7 @@ export default function Module1() {
           </div>
         </Section>
       </Sidebar>
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="order-first flex min-h-[55dvh] min-w-0 flex-1 flex-col lg:order-none lg:min-h-0">
         <PanelTitle>Plano xy</PanelTitle>
         <div className="min-h-0 flex-1 p-2">
           <Plot2D

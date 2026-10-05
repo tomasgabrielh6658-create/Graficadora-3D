@@ -209,7 +209,7 @@ export default function Module2() {
   ]
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-visible">
       <Sidebar fig={2}>
         <Section title="Ejemplos">
           <PresetPicker module={2} value={presetId} onChange={applyPreset} />
@@ -297,11 +297,11 @@ export default function Module2() {
           )}
         </Section>
       </Sidebar>
-      <main className="flex min-w-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1">
+      <main className="order-first flex min-h-[55dvh] min-w-0 flex-1 flex-col lg:order-none lg:min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <div className="flex min-w-0 flex-1 flex-col">
             <PanelTitle>Plano xy — región original</PanelTitle>
-            <div className="min-h-0 flex-1 p-2">
+            <div className="min-h-[36dvh] min-w-0 flex-1 p-2 lg:min-h-0">
               <Plot2D
                 view={view}
                 onView={setView}
@@ -358,7 +358,7 @@ export default function Module2() {
           </div>
           <div className="flex w-[42%] min-w-0 shrink-0 flex-col border-l border-line">
             <PanelTitle>Plano transformado ({isAngular ? 'θ, r' : 'u, v'})</PanelTitle>
-            <div className="min-h-0 flex-1 p-2">
+            <div className="min-h-[36dvh] min-w-0 flex-1 p-2 lg:min-h-0">
               <Plot2D
                 view={{ x0: T.uRange[0], x1: T.uRange[1], y0: T.vRange[0], y1: T.vRange[1] }}
                 field={uvField}

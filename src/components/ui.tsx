@@ -18,11 +18,11 @@ export function Logo({ size = 28 }: { size?: number }) {
 
 export function Sidebar({ children, fig }: { children: ReactNode; fig?: number }) {
   return (
-    <aside className="sidebar w-[320px] shrink-0 overflow-y-auto border-r border-line bg-white">
+    <aside className="sidebar w-full shrink-0 border-b border-line bg-white lg:w-[320px] lg:overflow-y-auto lg:border-b-0 lg:border-r">
       <div className="flex min-h-full flex-col">
         {children}
         {fig !== undefined && (
-          <div className="mt-auto px-4 pb-4 pt-6">
+          <div className="mt-auto hidden px-4 pb-4 pt-6 lg:block">
             <AsciiFigure fig={fig} />
           </div>
         )}

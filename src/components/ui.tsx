@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { AsciiFigure } from './AsciiArt'
 
 export function Logo({ size = 28 }: { size?: number }) {
   return (
@@ -12,10 +13,17 @@ export function Logo({ size = 28 }: { size?: number }) {
   )
 }
 
-export function Sidebar({ children }: { children: ReactNode }) {
+export function Sidebar({ children, fig }: { children: ReactNode; fig?: number }) {
   return (
     <aside className="sidebar w-[320px] shrink-0 overflow-y-auto border-r border-line bg-white">
-      {children}
+      <div className="flex min-h-full flex-col">
+        {children}
+        {fig !== undefined && (
+          <div className="mt-auto px-4 pb-4 pt-6">
+            <AsciiFigure fig={fig} />
+          </div>
+        )}
+      </div>
     </aside>
   )
 }

@@ -31,6 +31,16 @@ body {
   input[type="number"] { font-family: var(--font-mono); }
 }
 
+/* Trama dot-matrix (referencia: póster ASCII) */
+.dots {
+  background-image: radial-gradient(circle, #d9dbe6 0.9px, transparent 1.2px);
+  background-size: 7px 7px;
+}
+.dots-cobalt {
+  background-image: radial-gradient(circle, rgba(31, 59, 245, 0.22) 0.9px, transparent 1.2px);
+  background-size: 7px 7px;
+}
+
 /* Secciones numeradas del panel lateral: 01, 02, 03… */
 .sidebar { counter-reset: sec; }
 .sidebar summary::before {

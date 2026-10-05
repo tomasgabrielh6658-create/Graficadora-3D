@@ -93,7 +93,7 @@ export default function Module1() {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <Sidebar>
+      <Sidebar fig={1}>
         <Section title="Ejercicios típicos">
           <Select
             value={PRESETS.some((p) => p.id === presetId && p.module === 1) ? presetId : ''}

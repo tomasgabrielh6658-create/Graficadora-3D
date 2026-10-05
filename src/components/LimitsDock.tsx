@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import katex from 'katex'
-import { TriangleAlert } from 'lucide-react'
+import { Check, Copy, TriangleAlert } from 'lucide-react'
 
 export function TeX({ tex, className = '' }: { tex: string; className?: string }) {
   const html = useMemo(() => {
@@ -22,10 +22,29 @@ export function LimitsDock({
   jacobianTex?: string
   note?: string
 }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    const plain = tex.replace(/\\textcolor\{[^}]*\}\{([^}]*)\}/g, '$1')
+    navigator.clipboard?.writeText(plain).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1400)
+    })
+  }
   return (
     <div className="flex shrink-0 items-stretch overflow-x-auto border-t border-ink bg-white">
       <div className="flex min-w-0 shrink-0 flex-col justify-center border-r border-line px-4 py-2">
-        <div className="mb-0.5 font-mono text-[9.5px] uppercase tracking-wider text-cobalt">planteo iterado</div>
+        <div className="mb-0.5 flex items-center gap-2 font-mono text-[9.5px] uppercase tracking-wider text-cobalt">
+          planteo iterado
+          <button
+            onClick={copy}
+            title="Copiar el planteo en LaTeX"
+            className={`inline-flex items-center gap-1 border px-1 py-px normal-case tracking-normal transition-colors ${
+              copied ? 'border-emerald-500 text-emerald-600' : 'border-line text-mute hover:border-cobalt hover:text-cobalt'
+            }`}
+          >
+            {copied ? <Check size={10} /> : <Copy size={10} />} {copied ? 'copiado' : 'LaTeX'}
+          </button>
+        </div>
         <TeX tex={tex} className="text-[15px] text-ink" />
         {jacobianTex && (
           <div className="mt-0.5 text-xs text-mute">

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Axis3d, Box, Grid3x3, ImageDown, Maximize, Minus, Plus, RotateCw } from 'lucide-react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Line, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import type { BBox } from '../types'
 import type { SolidMesh } from '../lib/marchingTets'
+import { bboxRadius, fitDistance, fitZoom, FOV, viewPose, type ViewName } from '../lib/camera'
 
 export type Vec3 = [number, number, number]
 
@@ -122,6 +124,8 @@ function niceStep3(range: number, target = 6): number {
 }
 
 function AxisTicks({ bbox }: { bbox: BBox }) {
+  // separación de las etiquetas en dos direcciones: se leen en 3D y en las vistas planas
+  const lo3 = Math.max(bbox.x1 - bbox.x0, bbox.y1 - bbox.y0, bbox.z1 - bbox.z0) * 0.035
   const defs: {
     lo: number
     hi: number
@@ -136,21 +140,21 @@ function AxisTicks({ bbox }: { bbox: BBox }) {
       lo: bbox.x0, hi: bbox.x1, color: '#dc2626',
       at: (t) => [t, 0, 0],
       tick: (t, d) => [[t, -d, 0], [t, d, 0]],
-      lab: (t) => [t, -0.3, 0],
+      lab: (t) => [t, -lo3, -lo3],
       end: [bbox.x1, 0, 0], name: 'x',
     },
     {
       lo: bbox.y0, hi: bbox.y1, color: '#16a34a',
       at: (t) => [0, t, 0],
       tick: (t, d) => [[-d, t, 0], [d, t, 0]],
-      lab: (t) => [-0.3, t, 0],
+      lab: (t) => [-lo3, t, -lo3],
       end: [0, bbox.y1, 0], name: 'y',
     },
     {
       lo: bbox.z0, hi: bbox.z1, color: '#2563eb',
       at: (t) => [0, 0, t],
       tick: (t, d) => [[-d, 0, t], [d, 0, t]],
-      lab: (t) => [0, -0.3, t],
+      lab: (t) => [-lo3, -lo3, t],
       end: [0, 0, bbox.z1], name: 'z',
     },
   ]
@@ -235,87 +239,165 @@ export function Label3D({
   return <primitive object={sprite} position={p} />
 }
 
-function ViewSetter({ api, center, radius }: {
-  api: React.MutableRefObject<((v: string) => void) | null>
-  center: Vec3
-  radius: number
-}) {
+type Api = {
+  view: (v: ViewName) => void
+  zoom: (f: number) => void
+  snap: () => string
+}
+
+/**
+ * Controla la cámara desde adentro del Canvas: encuadra al montar y cada vez
+ * que cambia el bbox (cambio de ejercicio / "encuadrar"), aplica las vistas
+ * planas y el zoom de los botones, y exporta la imagen.
+ */
+function CameraRig({ api, bbox, ortho }: { api: React.MutableRefObject<Api | null>; bbox: BBox; ortho: boolean }) {
   const camera = useThree((s) => s.camera)
-  const controls = useThree((s) => s.controls) as { target: THREE.Vector3; update: () => void } | null
+  const size = useThree((s) => s.size)
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const invalidate = useThree((s) => s.invalidate)
+  const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update: () => void } | null
+  const bboxKey = `${bbox.x0},${bbox.x1},${bbox.y0},${bbox.y1},${bbox.z0},${bbox.z1}`
+  const sizeRef = useRef(size)
+  sizeRef.current = size
+
   useEffect(() => {
-    api.current = (v: string) => {
-      const d = radius * 2.2
-      const pos: Vec3 =
-        v === 'top' ? [center[0], center[1], center[2] + d]
-        : v === 'front' ? [center[0], center[1] - d, center[2]]
-        : v === 'side' ? [center[0] + d, center[1], center[2]]
-        : [center[0] + d * 0.75, center[1] - d * 0.9, center[2] + d * 0.7]
+    const view = (v: ViewName) => {
+      const pose = viewPose(bbox, v)
       camera.up.set(0, 0, 1)
-      camera.position.set(...pos)
+      if (ortho) {
+        camera.position.set(...pose.position)
+        const oc = camera as THREE.OrthographicCamera
+        oc.zoom = fitZoom(bbox, sizeRef.current.width, sizeRef.current.height)
+        oc.near = -bboxRadius(bbox) * 50
+        oc.far = bboxRadius(bbox) * 50
+      } else {
+        const c = pose.target
+        const d = fitDistance(bbox)
+        const dir = new THREE.Vector3(...pose.position).sub(new THREE.Vector3(...c)).normalize()
+        camera.position.set(c[0] + dir.x * d, c[1] + dir.y * d, c[2] + dir.z * d)
+        const pc = camera as THREE.PerspectiveCamera
+        pc.near = d / 100
+        pc.far = d * 20
+      }
+      camera.lookAt(...pose.target)
+      camera.updateProjectionMatrix()
       if (controls) {
-        controls.target.set(...center)
+        controls.target.set(...pose.target)
         controls.update()
       }
+      invalidate()
     }
-    api.current('home')
+    api.current = {
+      view,
+      zoom: (f) => {
+        if (ortho) {
+          ;(camera as THREE.OrthographicCamera).zoom *= f
+        } else if (controls) {
+          const off = camera.position.clone().sub(controls.target).multiplyScalar(1 / f)
+          camera.position.copy(controls.target).add(off)
+        }
+        camera.updateProjectionMatrix()
+        controls?.update()
+        invalidate()
+      },
+      snap: () => {
+        gl.render(scene, camera)
+        return gl.domElement.toDataURL('image/png')
+      },
+    }
+    view('home')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, controls])
+  }, [camera, controls, bboxKey, ortho])
   return null
 }
 
 export function Scene3D({
-  children, bbox, onViewApi,
+  children, bbox,
 }: {
   children: ReactNode
   bbox: BBox
-  onViewApi?: (api: (v: string) => void) => void
 }) {
-  const apiRef = useRef<((v: string) => void) | null>(null)
-  const center: Vec3 = [
-    (bbox.x0 + bbox.x1) / 2,
-    (bbox.y0 + bbox.y1) / 2,
-    (bbox.z0 + bbox.z1) / 2,
-  ]
-  const radius =
-    Math.max(bbox.x1 - bbox.x0, bbox.y1 - bbox.y0, bbox.z1 - bbox.z0) / 2
+  const apiRef = useRef<Api | null>(null)
+  const [ortho, setOrtho] = useState(true)
+  const [spin, setSpin] = useState(false)
+  const [axes, setAxes] = useState(true)
+  const [grid, setGrid] = useState(true)
+  const radius = Math.max(bbox.x1 - bbox.x0, bbox.y1 - bbox.y0, bbox.z1 - bbox.z0) / 2
   const axisLen = radius * 1.15
+  const savePng = () => {
+    const url = apiRef.current?.snap()
+    if (!url) return
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'solido-3d.png'
+    a.click()
+  }
+  const tool = 'grid h-7 w-7 place-items-center text-ink hover:bg-cobalt hover:text-white'
+  const on = (v: boolean) => (v ? 'bg-cobalt-50 text-cobalt' : '')
   return (
     <div className="relative h-full w-full">
       <Canvas
-        frameloop="demand"
+        key={ortho ? 'o' : 'p'}
+        orthographic={ortho}
+        frameloop={spin ? 'always' : 'demand'}
         dpr={[1, 1.75]}
-        camera={{ position: [center[0] + radius * 1.7, center[1] - radius * 2, center[2] + radius * 1.3], up: [0, 0, 1], fov: 45 }}
+        gl={{ antialias: true }}
+        camera={ortho ? { zoom: 60, up: [0, 0, 1], position: [5, -8, 5] } : { fov: FOV, up: [0, 0, 1], position: [5, -8, 5] }}
       >
         <color attach="background" args={['#ffffff']} />
         <ambientLight intensity={0.75} />
         <directionalLight position={[6, -4, 9]} intensity={1.4} />
         <directionalLight position={[-5, 6, -3]} intensity={0.4} />
-        <AxisTicks bbox={bbox} />
-        <gridHelper
-          args={[axisLen * 2, Math.max(4, Math.round(axisLen)), '#d6d6de', '#eeeef2']}
-          rotation={[Math.PI / 2, 0, 0]}
-          position={[0, 0, 0]}
-        />
-        <Label3D p={[bbox.x1 + axisLen * 0.06, 0, 0]} text="x" color="#dc2626" size={axisLen * 0.13} occluded />
-        <Label3D p={[0, bbox.y1 + axisLen * 0.06, 0]} text="y" color="#16a34a" size={axisLen * 0.13} occluded />
-        <Label3D p={[0, 0, bbox.z1 + axisLen * 0.06]} text="z" color="#2563eb" size={axisLen * 0.13} occluded />
+        {axes && (
+          <>
+            <AxisTicks bbox={bbox} />
+            <Label3D p={[bbox.x1 + axisLen * 0.06, 0, 0]} text="x" color="#dc2626" size={axisLen * 0.13} occluded />
+            <Label3D p={[0, bbox.y1 + axisLen * 0.06, 0]} text="y" color="#16a34a" size={axisLen * 0.13} occluded />
+            <Label3D p={[0, 0, bbox.z1 + axisLen * 0.06]} text="z" color="#2563eb" size={axisLen * 0.13} occluded />
+          </>
+        )}
+        {grid && (
+          <gridHelper
+            args={[axisLen * 2, Math.max(4, Math.round(axisLen)), '#d6d6de', '#eeeef2']}
+            rotation={[Math.PI / 2, 0, 0]}
+            position={[0, 0, 0]}
+          />
+        )}
         {children}
-        <OrbitControls makeDefault target={center} />
-        <ViewSetter api={apiRef} center={center} radius={radius} />
+        <OrbitControls makeDefault autoRotate={spin} autoRotateSpeed={1.2} enableDamping={false} />
+        <CameraRig api={apiRef} bbox={bbox} ortho={ortho} />
       </Canvas>
-      <div className="absolute right-3 top-3 flex border border-ink bg-white text-[10.5px] shadow-[2px_2px_0_0_rgba(11,11,16,0.08)]">
-        {(['home', 'top', 'front', 'side'] as const).map((v, i) => (
+      <div className="absolute right-3 top-3 flex flex-col items-end gap-1.5">
+        <div className="flex border border-ink bg-white text-[10.5px] shadow-[2px_2px_0_0_rgba(11,11,16,0.08)]">
+          {(['home', 'top', 'front', 'side'] as const).map((v, i) => (
+            <button
+              key={v}
+              className={`px-2.5 py-1 font-medium text-ink hover:bg-cobalt hover:text-white ${i ? 'border-l border-line' : ''}`}
+              onClick={() => apiRef.current?.view(v)}
+              title={{ home: 'Vista 3D', top: 'Mirar desde arriba (plano XY)', front: 'Mirar de frente (plano XZ)', side: 'Mirar de costado (plano YZ)' }[v]}
+            >
+              {{ home: '3D', top: 'XY', front: 'XZ', side: 'YZ' }[v]}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-col border border-line bg-white shadow-[2px_2px_0_0_rgba(11,11,16,0.06)] [&>*+*]:border-t [&>*+*]:border-line">
+          <button className={tool} title="Acercar" onClick={() => apiRef.current?.zoom(1.25)}><Plus size={14} /></button>
+          <button className={tool} title="Alejar" onClick={() => apiRef.current?.zoom(0.8)}><Minus size={14} /></button>
+          <button className={tool} title="Encuadrar el sólido" onClick={() => apiRef.current?.view('home')}><Maximize size={13} /></button>
+          <button className={`${tool} ${on(spin)}`} title="Girar automáticamente" onClick={() => setSpin((v) => !v)}><RotateCw size={13} /></button>
+          <button className={`${tool} ${on(axes)}`} title="Mostrar/ocultar ejes" onClick={() => setAxes((v) => !v)}><Axis3d size={14} /></button>
+          <button className={`${tool} ${on(grid)}`} title="Mostrar/ocultar grilla" onClick={() => setGrid((v) => !v)}><Grid3x3 size={13} /></button>
           <button
-            key={v}
-            className={`px-2.5 py-1 font-medium text-ink hover:bg-cobalt hover:text-white ${i ? 'border-l border-line' : ''}`}
-            onClick={() => apiRef.current?.(v)}
-            title={{ home: 'Vista isométrica', top: 'Mirar desde arriba (plano XY)', front: 'Mirar de frente (plano XZ)', side: 'Mirar de costado (plano YZ)' }[v]}
+            className={`${tool} ${on(!ortho)}`}
+            title={ortho ? 'Cambiar a perspectiva (los objetos lejanos se ven más chicos)' : 'Volver a ortográfica (sin deformación, como GeoGebra)'}
+            onClick={() => setOrtho((v) => !v)}
           >
-            {{ home: '3D', top: 'XY', front: 'XZ', side: 'YZ' }[v]}
+            <Box size={13} />
           </button>
-        ))}
+          <button className={tool} title="Descargar imagen PNG" onClick={savePng}><ImageDown size={13} /></button>
+        </div>
       </div>
-      {onViewApi && <span ref={() => onViewApi((v: string) => apiRef.current?.(v))} className="hidden" />}
     </div>
   )
 }

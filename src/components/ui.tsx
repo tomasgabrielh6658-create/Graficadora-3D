@@ -38,7 +38,8 @@ export function Section({
   return (
     <details open={defaultOpen} className="group border-b border-line">
       <summary className="flex cursor-pointer select-none items-center px-4 pb-2 pt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-ink hover:bg-paper">
-        <span className="flex-1">{title}</span>
+        <span>{title}</span>
+        <span className="mx-2 mt-1 flex-1 border-b border-dotted border-ink/20" />
         <ChevronDown size={13} className="chev text-mute transition-transform" />
       </summary>
       <div className="px-4 pb-3.5">{children}</div>

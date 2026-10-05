@@ -64,13 +64,32 @@ export function Plot2D(props: Props) {
   const dragMode = useRef<null | 'sweep' | 'pan'>(null)
   const startPt = useRef<{ px: number; py: number; view: Props['view'] } | null>(null)
   const geom = useRef<{ s: number; ox: number; oy: number; w: number; h: number } | null>(null)
+  // Capa estática offscreen: la región y las curvas (marching squares, lo caro)
+  // se dibujan una sola vez; durante el arrastre solo se reubica la imagen.
+  const staticRef = useRef<{
+    cv: HTMLCanvasElement
+    view: Props['view']
+    w: number
+    h: number
+    dpr: number
+  } | null>(null)
+  const staticDeps = useRef<readonly unknown[] | null>(null)
+  const interacting = useRef(false)
+  const settleTimer = useRef(0)
+  const committedRef = useRef(props.view)
+  committedRef.current = props.view
   // Los eventos de puntero pueden llegar a >120 Hz: se colapsan a uno por frame
   const rafPending = useRef(0)
   const queuedSweep = useRef<number | null>(null)
   const queuedCursor = useRef<{ x: number; y: number } | null | undefined>(undefined)
+  const queuedView = useRef<Props['view'] | null>(null)
   const flushCallbacks = () => {
     rafPending.current = 0
     const p = propsRef.current
+    if (queuedView.current) {
+      setPanView(queuedView.current)
+      queuedView.current = null
+    }
     if (queuedSweep.current !== null) {
       p.onSweep?.(queuedSweep.current)
       queuedSweep.current = null
@@ -88,10 +107,92 @@ export function Plot2D(props: Props) {
     queuedCursor.current = pt
     if (!rafPending.current) rafPending.current = requestAnimationFrame(flushCallbacks)
   }
+  const fireView = (v: Props['view']) => {
+    queuedView.current = v
+    if (!rafPending.current) rafPending.current = requestAnimationFrame(flushCallbacks)
+  }
 
   // El pan/zoom interno se resetea cuando el padre cambia la vista (auto-encuadre, preset…)
   const viewKey = `${props.view.x0},${props.view.x1},${props.view.y0},${props.view.y1}`
-  useEffect(() => setPanView(null), [viewKey])
+  useEffect(() => {
+    queuedView.current = null
+    setPanView(null)
+  }, [viewKey])
+
+  // Región + curvas sobre un canvas aparte: se reutiliza como imagen durante
+  // el arrastre y solo se recalcula al soltar, cambiar de tamaño o cambiar
+  // los datos (identidad de field/geom/curves/fill).
+  const renderStatic = (p: Props, v: Props['view'], w: number, h: number, dpr: number) => {
+    let st = staticRef.current
+    if (!st || st.w !== w || st.h !== h || st.dpr !== dpr) {
+      st = { cv: document.createElement('canvas'), view: v, w, h, dpr }
+      staticRef.current = st
+    }
+    st.view = { x0: v.x0, x1: v.x1, y0: v.y0, y1: v.y1 }
+    st.cv.width = Math.round(w * dpr)
+    st.cv.height = Math.round(h * dpr)
+    const c2 = st.cv.getContext('2d')
+    if (!c2) return
+    c2.setTransform(dpr, 0, 0, dpr, 0, 0)
+    c2.clearRect(0, 0, w, h)
+    const pad = 8
+    const s = Math.min((w - 2 * pad) / (v.x1 - v.x0), (h - 2 * pad) / (v.y1 - v.y0))
+    const ox = (w - s * (v.x1 - v.x0)) / 2
+    const oy = (h - s * (v.y1 - v.y0)) / 2
+    const toPx = (x: number, y: number): [number, number] => [
+      ox + (x - v.x0) * s,
+      h - (oy + (y - v.y0) * s),
+    ]
+    if (p.geom || p.field) {
+      const ms = p.geom ?? marchingSquares(p.field!, v.x0, v.x1, v.y0, v.y1, 150, 150)
+      c2.fillStyle = p.fill ?? 'rgba(31,59,245,0.16)'
+      c2.beginPath()
+      for (let i = 0; i < ms.triCount; i++) {
+        const t = i * 6
+        const [ax, ay] = toPx(ms.tris[t], ms.tris[t + 1])
+        const [bx, by] = toPx(ms.tris[t + 2], ms.tris[t + 3])
+        const [cx, cy] = toPx(ms.tris[t + 4], ms.tris[t + 5])
+        c2.moveTo(ax, ay)
+        c2.lineTo(bx, by)
+        c2.lineTo(cx, cy)
+        c2.closePath()
+      }
+      c2.fill()
+    }
+    for (const c of p.curves ?? []) {
+      const ms = marchingSquares(c.f, v.x0, v.x1, v.y0, v.y1, 160, 160)
+      c2.strokeStyle = c.color
+      c2.globalAlpha = 0.28
+      c2.lineWidth = 1.2
+      c2.beginPath()
+      for (let i = 0; i < ms.edgeCount; i++) {
+        const t = i * 4
+        const [ax, ay] = toPx(ms.edges[t], ms.edges[t + 1])
+        const [bx, by] = toPx(ms.edges[t + 2], ms.edges[t + 3])
+        c2.moveTo(ax, ay)
+        c2.lineTo(bx, by)
+      }
+      c2.stroke()
+      if (c.clip) {
+        c2.globalAlpha = 1
+        c2.lineWidth = 2.4
+        c2.beginPath()
+        for (let i = 0; i < ms.edgeCount; i++) {
+          const t = i * 4
+          const mx = (ms.edges[t] + ms.edges[t + 2]) / 2
+          const my = (ms.edges[t + 1] + ms.edges[t + 3]) / 2
+          if (c.clip(mx, my) <= 0) {
+            const [ax, ay] = toPx(ms.edges[t], ms.edges[t + 1])
+            const [bx, by] = toPx(ms.edges[t + 2], ms.edges[t + 3])
+            c2.moveTo(ax, ay)
+            c2.lineTo(bx, by)
+          }
+        }
+        c2.stroke()
+      }
+      c2.globalAlpha = 1
+    }
+  }
 
   const draw = () => {
     const canvas = canvasRef.current
@@ -160,50 +261,31 @@ export function Plot2D(props: Props) {
       }
     }
 
-    if (p.geom || p.field) {
-      const ms = p.geom ?? marchingSquares(p.field!, x0, x1, y0, y1, 150, 150)
-      ctx.fillStyle = p.fill ?? 'rgba(31,59,245,0.16)'
-      ctx.beginPath()
-      for (let i = 0; i < ms.triCount; i++) {
-        const t = i * 6
-        const [ax, ay] = toPx(ms.tris[t], ms.tris[t + 1])
-        const [bx, by] = toPx(ms.tris[t + 2], ms.tris[t + 3])
-        const [cx, cy] = toPx(ms.tris[t + 4], ms.tris[t + 5])
-        ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx, cy); ctx.closePath()
-      }
-      ctx.fill()
+    // Capa estática: región + curvas ya rasterizadas; durante el arrastre se
+    // reutiliza la imagen trasladada/escalada sin recalcular marching squares.
+    const deps = [p.field, p.geom, p.curves, p.fill]
+    const prevDeps = staticDeps.current
+    const depsChanged = !prevDeps || deps.some((d, i) => d !== prevDeps[i])
+    if (depsChanged) staticDeps.current = deps
+    let st = staticRef.current
+    const sizeOk = !!st && st.w === w && st.h === h && st.dpr === dpr
+    const sameView =
+      !!st && st.view.x0 === x0 && st.view.x1 === x1 && st.view.y0 === y0 && st.view.y1 === y1
+    if (!sizeOk || depsChanged || (!interacting.current && !sameView)) {
+      renderStatic(p, p.view, w, h, dpr)
+      st = staticRef.current
     }
-
-    for (const c of p.curves ?? []) {
-      const ms = marchingSquares(c.f, x0, x1, y0, y1, 160, 160)
-      ctx.strokeStyle = c.color
-      ctx.globalAlpha = 0.28
-      ctx.lineWidth = 1.2
-      ctx.beginPath()
-      for (let i = 0; i < ms.edgeCount; i++) {
-        const t = i * 4
-        const [ax, ay] = toPx(ms.edges[t], ms.edges[t + 1])
-        const [bx, by] = toPx(ms.edges[t + 2], ms.edges[t + 3])
-        ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
-      }
-      ctx.stroke()
-      if (c.clip) {
-        ctx.globalAlpha = 1
-        ctx.lineWidth = 2.4
-        ctx.beginPath()
-        for (let i = 0; i < ms.edgeCount; i++) {
-          const t = i * 4
-          const mx = (ms.edges[t] + ms.edges[t + 2]) / 2
-          const my = (ms.edges[t + 1] + ms.edges[t + 3]) / 2
-          if (c.clip(mx, my) <= 0) {
-            const [ax, ay] = toPx(ms.edges[t], ms.edges[t + 1])
-            const [bx, by] = toPx(ms.edges[t + 2], ms.edges[t + 3])
-            ctx.moveTo(ax, ay); ctx.lineTo(bx, by)
-          }
-        }
-        ctx.stroke()
-      }
-      ctx.globalAlpha = 1
+    if (st) {
+      const sv = st.view
+      const sS = Math.min((st.w - 2 * pad) / (sv.x1 - sv.x0), (st.h - 2 * pad) / (sv.y1 - sv.y0))
+      const oxS = (st.w - sS * (sv.x1 - sv.x0)) / 2
+      const oyS = (st.h - sS * (sv.y1 - sv.y0)) / 2
+      const k = s / sS
+      ctx.save()
+      ctx.translate(ox - k * oxS + s * (sv.x0 - x0), k * oyS - oy + s * (y0 - sv.y0) + h * (1 - k))
+      ctx.scale(k, k)
+      ctx.drawImage(st.cv, 0, 0, st.w, st.h)
+      ctx.restore()
     }
 
     const sw = p.sweep
@@ -283,6 +365,32 @@ export function Plot2D(props: Props) {
     void toMath
   }
 
+  // Fin de la interacción: redibuja la capa estática nítida en la vista final
+  // y avisa la vista al padre una sola vez (no en cada movimiento del drag).
+  const endInteraction = () => {
+    window.clearTimeout(settleTimer.current)
+    if (!interacting.current) return
+    interacting.current = false
+    if (queuedView.current) {
+      propsRef.current = { ...propsRef.current, view: queuedView.current }
+      setPanView(queuedView.current)
+      queuedView.current = null
+    }
+    draw()
+    const p = propsRef.current
+    const v = p.view
+    const cv = committedRef.current
+    if (p.onView && (v.x0 !== cv.x0 || v.x1 !== cv.x1 || v.y0 !== cv.y0 || v.y1 !== cv.y1)) {
+      p.onView(v)
+    }
+  }
+  // Marca "interactuando" y pospone el settle (rueda del mouse / botones).
+  const poke = () => {
+    interacting.current = true
+    window.clearTimeout(settleTimer.current)
+    settleTimer.current = window.setTimeout(endInteraction, 170)
+  }
+
   useEffect(() => {
     draw()
     const canvas = canvasRef.current
@@ -324,11 +432,15 @@ export function Plot2D(props: Props) {
         y0: m.y - (m.y - v.y0) * f,
         y1: m.y + (v.y1 - m.y) * f,
       }
-      setPanView(nv)
-      p.onView?.(nv)
+      fireView(nv)
+      poke()
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
-    return () => canvas.removeEventListener('wheel', onWheel)
+    return () => {
+      canvas.removeEventListener('wheel', onWheel)
+      window.clearTimeout(settleTimer.current)
+      cancelAnimationFrame(rafPending.current)
+    }
   }, [])
 
   const sweepDistPx = (px: number, py: number): number => {
@@ -357,10 +469,13 @@ export function Plot2D(props: Props) {
     const v = propsRef.current.view
     const cx = (v.x0 + v.x1) / 2, cy = (v.y0 + v.y1) / 2
     const nv = { x0: cx - (cx - v.x0) * f, x1: cx + (v.x1 - cx) * f, y0: cy - (cy - v.y0) * f, y1: cy + (v.y1 - cy) * f }
-    setPanView(nv)
-    propsRef.current.onView?.(nv)
+    fireView(nv)
+    poke()
   }
   const home = () => {
+    queuedView.current = null
+    interacting.current = false
+    window.clearTimeout(settleTimer.current)
     setPanView(null)
     props.onHome?.()
   }
@@ -380,6 +495,8 @@ export function Plot2D(props: Props) {
         const m = evtToMath(e)
         const p = propsRef.current
         if (!m) return
+        interacting.current = true
+        window.clearTimeout(settleTimer.current)
         startPt.current = { px: m.px, py: m.py, view: { ...p.view } }
         if (p.sweep && p.onSweep && sweepDistPx(m.px, m.py) < 12) {
           dragMode.current = 'sweep'
@@ -403,8 +520,7 @@ export function Plot2D(props: Props) {
           const dy = (m.py - startPt.current.py) / g.s
           const sv = startPt.current.view
           const nv = { x0: sv.x0 - dx, x1: sv.x1 - dx, y0: sv.y0 + dy, y1: sv.y1 + dy }
-          setPanView(nv)
-          p.onView?.(nv)
+          fireView(nv)
           canvas.style.cursor = 'grabbing'
         } else {
           canvas.style.cursor = p.sweep && p.onSweep && sweepDistPx(m.px, m.py) < 12 ? (p.sweep.axis === 'v' ? 'ew-resize' : 'ns-resize') : 'grab'
@@ -423,11 +539,18 @@ export function Plot2D(props: Props) {
           if (moved < 4) fireCursor({ x: m.x, y: m.y })
         }
         startPt.current = null
+        endInteraction()
+      }}
+      onPointerCancel={() => {
+        dragMode.current = null
+        startPt.current = null
+        endInteraction()
       }}
       onPointerLeave={() => {
         dragMode.current = null
         fireCursor(null)
         showCoord(null)
+        endInteraction()
       }}
     />
     </div>

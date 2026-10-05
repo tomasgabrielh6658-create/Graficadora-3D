@@ -139,31 +139,45 @@ export default function Module2() {
   }
   const activePreset = PRESETS.find((p) => p.id === presetId)
 
-  const curves = cons
-    .filter((c) => c.visible)
-    .map((c) => ({
-      f: (x: number, y: number) => c.boundary(x, y, 0),
-      color: c.color,
-      clip: (x: number, y: number) => region.field(x, y, 0),
-    }))
-  const curvesUV = cons
-    .filter((c) => c.visible)
-    .map((c) => ({
-      f: (u: number, v: number) => {
-        const [x, y] = T.forward(u, v)
-        return Number.isFinite(x) ? c.boundary(x, y, 0) : 1
-      },
-      color: c.color,
-      clip: (u: number, v: number) => {
-        const [x, y] = T.forward(u, v)
-        return Number.isFinite(x) ? region.field(x, y, 0) : 1
-      },
-    }))
+  // Memoizados: son deps de la capa estática de Plot2D (si cambian de
+  // identidad por render se recalcula el marching squares en cada frame).
+  const fieldXY = useMemo(() => (x: number, y: number) => region.field(x, y, 0), [region])
+  const curves = useMemo(
+    () =>
+      cons
+        .filter((c) => c.visible)
+        .map((c) => ({
+          f: (x: number, y: number) => c.boundary(x, y, 0),
+          color: c.color,
+          clip: (x: number, y: number) => region.field(x, y, 0),
+        })),
+    [cons, region],
+  )
+  const curvesUV = useMemo(
+    () =>
+      cons
+        .filter((c) => c.visible)
+        .map((c) => ({
+          f: (u: number, v: number) => {
+            const [x, y] = T.forward(u, v)
+            return Number.isFinite(x) ? c.boundary(x, y, 0) : 1
+          },
+          color: c.color,
+          clip: (u: number, v: number) => {
+            const [x, y] = T.forward(u, v)
+            return Number.isFinite(x) ? region.field(x, y, 0) : 1
+          },
+        })),
+    [cons, T, region],
+  )
 
-  const uvField = (u: number, v: number) => {
-    const [x, y] = T.forward(u, v)
-    return Number.isFinite(x) ? region.field(x, y, 0) : 1
-  }
+  const uvField = useMemo(
+    () => (u: number, v: number) => {
+      const [x, y] = T.forward(u, v)
+      return Number.isFinite(x) ? region.field(x, y, 0) : 1
+    },
+    [T, region],
+  )
 
   const markLeft = cursorUV
     ? (() => {
@@ -305,7 +319,7 @@ export default function Module2() {
               <Plot2D
                 view={view}
                 onView={setView}
-                field={(x, y) => region.field(x, y, 0)}
+                field={fieldXY}
                 curves={curves}
                 marks={markLeft}
                 onCursor={setCursorXY}

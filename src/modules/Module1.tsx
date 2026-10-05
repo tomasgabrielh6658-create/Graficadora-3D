@@ -67,13 +67,20 @@ export default function Module1() {
   }
 
   const activePreset = PRESETS.find((p) => p.id === presetId)
-  const curves = cons
-    .filter((c) => c.visible)
-    .map((c) => ({
-      f: (x: number, y: number) => c.boundary(x, y, 0),
-      color: c.color,
-      clip: (x: number, y: number) => region.field(x, y, 0),
-    }))
+  // field/curves memoizados: Plot2D los usa como deps de su capa estática;
+  // si cambian de identidad en cada render se recalcularía el marching squares.
+  const field2d = useMemo(() => (x: number, y: number) => region.field(x, y, 0), [region])
+  const curves = useMemo(
+    () =>
+      cons
+        .filter((c) => c.visible)
+        .map((c) => ({
+          f: (x: number, y: number) => c.boundary(x, y, 0),
+          color: c.color,
+          clip: (x: number, y: number) => region.field(x, y, 0),
+        })),
+    [cons, region],
+  )
 
   const innerVar = sweepAxis
   const outerVar = outerAxis
@@ -139,7 +146,7 @@ export default function Module1() {
             view={view}
             onView={setView}
             onHome={() => fitTo(raws)}
-            field={(x, y) => region.field(x, y, 0)}
+            field={field2d}
             curves={curves}
             sweep={{ axis: sweep === 'T1' ? 'v' : 'h', pos, intervals: hit.intervals }}
             onSweep={setPos}

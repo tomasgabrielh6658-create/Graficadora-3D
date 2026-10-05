@@ -273,11 +273,6 @@ export function Plot2D(props: Props) {
     }
 
     p.extras?.(ctx, toPx)
-    ctx.fillStyle = '#a0a0ab'
-    ctx.font = '9.5px ui-monospace, Consolas, monospace'
-    ctx.textAlign = 'right'
-    ctx.fillText('rueda = zoom · arrastrar = mover', w - 6, h - 6)
-    ctx.textAlign = 'left'
     ctx.strokeStyle = '#e4e4ea'
     ctx.strokeRect(0.5, 0.5, w - 1, h - 1)
     void toMath

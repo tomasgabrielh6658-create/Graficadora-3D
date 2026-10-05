@@ -24,9 +24,12 @@ const helado = (s: number, dz: number): Patch[] => [
 
 export const FIGS: Record<number, { name: string; eq: string; patches: Patch[] }> = {
   1: {
-    name: 'silla',
-    eq: 'z = x² − y²',
-    patches: [{ f: (u, v) => [u * 0.78, v * 0.78, (u * u - v * v) * 0.5], u: [-1, 1], v: [-1, 1], nu: 80, nv: 80 }],
+    name: 'campana',
+    eq: 'z = e^(−x²−y²)',
+    patches: [{
+      f: (u, v) => [u * 0.7, v * 0.7, 0.95 * Math.exp(-3 * (u * u + v * v)) - 0.2],
+      u: [-1, 1], v: [-1, 1], nu: 90, nv: 90,
+    }],
   },
   2: {
     name: 'toro',

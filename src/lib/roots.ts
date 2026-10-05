@@ -26,10 +26,12 @@ export function intervalsLe0(
     const t = lo + step * i
     const v = f(t)
     const inside = v <= 0
+    // La bisección trata NaN como "afuera", así que también refina bordes de
+    // dominio (p. ej. √x con x < 0) en lugar de quedarse a un paso de grilla.
     if (inside && open === null) {
-      open = Number.isFinite(prevV) ? refineBoundary(f, prevT, t) : t
+      open = refineBoundary(f, prevT, t)
     } else if (!inside && open !== null) {
-      const end = Number.isFinite(v) ? refineBoundary(f, t, prevT) : t
+      const end = refineBoundary(f, t, prevT)
       res.push({ a: open, b: end })
       open = null
     }

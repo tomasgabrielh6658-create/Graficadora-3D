@@ -1,9 +1,10 @@
-import { Suspense, lazy, useRef } from 'react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import { Download, Upload } from 'lucide-react'
 import { usePersisted, exportAll, importAll } from './lib/persistence'
 import Module1 from './modules/Module1'
 import Module2 from './modules/Module2'
 import { Btn, Logo } from './components/ui'
+import { AsciiSolid } from './components/AsciiArt'
 
 const Module3 = lazy(() => import('./modules/Module3'))
 const Module4 = lazy(() => import('./modules/Module4'))
@@ -20,7 +21,7 @@ const TABS = [
 
 const HINTS: Record<number, string> = {
   1: 'arrastrar = mover · rueda = zoom · arrastrá la línea violeta para barrer',
-  2: 'pasá el mouse sobre un plano para ver el punto correspondiente en el otro',
+  2: 'pasá el mouse sobre un plano para ver el punto correspondiente en el otro · rueda = zoom',
   3: 'arrastrar = rotar · click derecho = mover · click en la sombra = ubicar la flecha',
   4: 'arrastrar = rotar · click en el panel (θ, r / θ, φ) = mover la exploración',
 }
@@ -57,6 +58,17 @@ export default function App() {
   const [mod, setMod] = usePersisted<number>('module', 1)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (e.ctrlKey || e.metaKey || e.altKey || t.closest('input, select, textarea, [contenteditable]')) return
+      const n = Number(e.key)
+      if (n >= 1 && n <= 4) setMod(n)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [setMod])
+
   return (
     <div className="flex h-full flex-col bg-white">
       <header className="flex h-12 shrink-0 items-stretch border-b border-ink">
@@ -78,6 +90,7 @@ export default function App() {
               <button
                 key={t.id}
                 onClick={() => setMod(t.id)}
+                title={`${t.label} · tecla ${t.id}`}
                 className={`relative flex items-center gap-2 border-r border-line px-4 text-xs transition-colors ${
                   active ? 'bg-white font-semibold text-ink' : 'text-mute hover:bg-paper hover:text-ink'
                 }`}
@@ -90,7 +103,12 @@ export default function App() {
             )
           })}
         </nav>
-        <div className="ml-auto flex items-center gap-1 px-3">
+        <div className="dots hidden flex-1 items-center justify-end px-4 lg:flex" aria-hidden>
+          <span className="bg-white px-1.5 font-mono text-[10px] tracking-wider text-mute">
+            región <span className="text-cobalt">→</span> límites <span className="text-cobalt">→</span> ∫
+          </span>
+        </div>
+        <div className="ml-auto flex items-center gap-1 border-l border-line px-3">
           <Btn
             variant="ghost"
             title="Guardar todos los ejercicios en un archivo JSON"
@@ -128,8 +146,13 @@ export default function App() {
       {mod === 2 && <Module2 />}
       <Suspense
         fallback={
-          <div className="grid flex-1 place-items-center font-mono text-xs uppercase tracking-wider text-mute">
-            cargando motor 3D…
+          <div className="dots grid flex-1 place-items-center">
+            <div className="border border-line bg-white px-6 py-4 text-center">
+              <AsciiSolid fig={mod} cols={56} rows={24} className="text-[11px] text-cobalt" />
+              <div className="mt-2 font-mono text-[10px] uppercase tracking-wider text-mute">
+                cargando motor 3D<span className="animate-pulse text-cobalt">_</span>
+              </div>
+            </div>
           </div>
         }
       >
@@ -137,7 +160,10 @@ export default function App() {
         {mod === 4 && <Module4 />}
       </Suspense>
       <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-line bg-paper px-4 text-[11px]">
-        <span className="truncate font-mono text-[10px] text-mute">{HINTS[mod]}</span>
+        <span className="truncate font-mono text-[10px] text-mute">
+          <span className="text-cobalt">›</span> {HINTS[mod]}
+          <span className="ml-3 hidden text-ink/35 xl:inline">teclas 1–4 = cambiar módulo</span>
+        </span>
         <span className="ml-auto shrink-0">
           <Credit />
         </span>

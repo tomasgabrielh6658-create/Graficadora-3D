@@ -271,9 +271,9 @@ export default function Module4() {
           <BoxEditor bbox={bbox} onChange={setBbox} />
         </Section>
       </Sidebar>
-      <main className="order-first flex min-h-[55dvh] min-w-0 flex-1 flex-col lg:order-none lg:min-h-0">
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <div className="min-h-[45dvh] min-w-0 flex-1 p-2 lg:min-h-0">
+      <main className="order-first flex min-w-0 flex-col lg:order-none lg:min-h-0 lg:flex-1">
+        <div className="flex flex-col lg:min-h-0 lg:flex-1 lg:flex-row">
+          <div className="h-[44dvh] min-w-0 p-2 lg:h-auto lg:min-h-0 lg:flex-1">
             <Scene3D bbox={bbox}>
               <Solid mesh={mesh} opacity={opacity} wireframe={wire} />
               {surfMeshes.map((m, i) => (
@@ -289,7 +289,7 @@ export default function Module4() {
           </div>
           <div className="flex w-full shrink-0 flex-col border-t border-line bg-white lg:w-[340px] lg:border-l lg:border-t-0">
             <PanelTitle>{isCyl ? 'La base vista en (θ, r)' : 'Las direcciones vistas en (θ, φ)'}</PanelTitle>
-            <div className="min-h-[38dvh] flex-1 lg:min-h-0">
+            <div className="h-[34dvh] lg:h-auto lg:min-h-0 lg:flex-1">
               <Plot2D
                 view={
                   isCyl

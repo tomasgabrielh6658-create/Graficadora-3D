@@ -91,8 +91,11 @@ export function Plot2D(props: Props) {
   const effView = panView ?? props.view
   const propsRef = useRef(props)
   propsRef.current = { ...props, view: effView }
-  const dragMode = useRef<null | 'sweep' | 'pan'>(null)
+  const dragMode = useRef<null | 'sweep' | 'pan' | 'pinch'>(null)
   const startPt = useRef<{ px: number; py: number; view: Props['view'] } | null>(null)
+  // Punteros táctiles activos + último frame de la pinza (zoom + paneo de 2 dedos)
+  const pointers = useRef(new Map<number, { px: number; py: number }>())
+  const pinchLast = useRef<{ d: number; mx: number; my: number } | null>(null)
   const geom = useRef<{ s: number; ox: number; oy: number; w: number; h: number } | null>(null)
   // Capa estática offscreen: la región y las curvas (marching squares, lo caro)
   // se dibujan una sola vez; durante el arrastre solo se reubica la imagen.
@@ -448,19 +451,24 @@ export function Plot2D(props: Props) {
     return () => ro.disconnect()
   })
 
-  const evtToMath = (e: React.PointerEvent | WheelEvent) => {
+  const pxToMath = (px: number, py: number) => {
     const g = geom.current
-    const canvas = canvasRef.current
-    if (!g || !canvas) return null
-    const rect = canvas.getBoundingClientRect()
-    const px = e.clientX - rect.left
-    const py = e.clientY - rect.top
+    if (!g) return null
     const p = propsRef.current
     return {
       x: p.view.x0 + (px - g.ox) / g.s,
       y: p.view.y0 + (g.h - py - g.oy) / g.s,
-      px, py,
     }
+  }
+
+  const evtToMath = (e: React.PointerEvent | WheelEvent) => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const rect = canvas.getBoundingClientRect()
+    const px = e.clientX - rect.left
+    const py = e.clientY - rect.top
+    const m = pxToMath(px, py)
+    return m ? { ...m, px, py } : null
   }
 
   // Zoom con rueda anclado al cursor (listener nativo: React pasa wheel como passive)
@@ -546,8 +554,18 @@ export function Plot2D(props: Props) {
         const m = evtToMath(e)
         const p = propsRef.current
         if (!m) return
+        pointers.current.set(e.pointerId, { px: m.px, py: m.py })
         interacting.current = true
         window.clearTimeout(settleTimer.current)
+        ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+        if (pointers.current.size === 2) {
+          // segundo dedo: pasa a pinza (zoom + paneo con 2 dedos)
+          const [a, b] = [...pointers.current.values()]
+          dragMode.current = 'pinch'
+          pinchLast.current = { d: Math.hypot(a.px - b.px, a.py - b.py), mx: (a.px + b.px) / 2, my: (a.py + b.py) / 2 }
+          return
+        }
+        if (pointers.current.size > 2) return
         startPt.current = { px: m.px, py: m.py, view: { ...p.view } }
         if (p.sweep && p.onSweep && sweepDistPx(m.px, m.py) < 12) {
           dragMode.current = 'sweep'
@@ -555,13 +573,37 @@ export function Plot2D(props: Props) {
         } else {
           dragMode.current = 'pan'
         }
-        ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
       }}
       onPointerMove={(e) => {
         const m = evtToMath(e)
         const p = propsRef.current
         const canvas = canvasRef.current
         if (!m || !canvas) return
+        if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { px: m.px, py: m.py })
+        if (dragMode.current === 'pinch' && pointers.current.size >= 2) {
+          const g = geom.current!
+          const [a, b] = [...pointers.current.values()]
+          const d = Math.hypot(a.px - b.px, a.py - b.py)
+          const mx = (a.px + b.px) / 2
+          const my = (a.py + b.py) / 2
+          const last = pinchLast.current
+          if (last && d > 0) {
+            const f = d / last.d // >1 = acercar
+            const mid = pxToMath(mx, my)!
+            const v = p.view
+            const dx = (mx - last.mx) / g.s
+            const dy = (my - last.my) / g.s
+            fireView({
+              x0: mid.x - (mid.x - v.x0) / f - dx,
+              x1: mid.x + (v.x1 - mid.x) / f - dx,
+              y0: mid.y - (mid.y - v.y0) / f + dy,
+              y1: mid.y + (v.y1 - mid.y) / f + dy,
+            })
+            poke()
+          }
+          pinchLast.current = { d, mx, my }
+          return
+        }
         if (dragMode.current === 'sweep' && p.sweep && p.onSweep) {
           fireSweep(p.sweep.axis === 'v' ? m.x : m.y)
           canvas.style.cursor = p.sweep.axis === 'v' ? 'ew-resize' : 'ns-resize'
@@ -582,6 +624,21 @@ export function Plot2D(props: Props) {
       onPointerUp={(e) => {
         const m = evtToMath(e)
         const p = propsRef.current
+        pointers.current.delete(e.pointerId)
+        if (dragMode.current === 'pinch') {
+          // si queda un dedo, sigue como paneo con el dedo que quedó
+          pinchLast.current = null
+          const rest = [...pointers.current.values()][0]
+          if (rest && pointers.current.size === 1) {
+            dragMode.current = 'pan'
+            startPt.current = { px: rest.px, py: rest.py, view: { ...p.view } }
+            return
+          }
+          dragMode.current = null
+          startPt.current = null
+          endInteraction()
+          return
+        }
         const wasPan = dragMode.current === 'pan'
         dragMode.current = null
         if (canvasRef.current) canvasRef.current.style.cursor = 'grab'
@@ -592,16 +649,23 @@ export function Plot2D(props: Props) {
         startPt.current = null
         endInteraction()
       }}
-      onPointerCancel={() => {
-        dragMode.current = null
-        startPt.current = null
-        endInteraction()
+      onPointerCancel={(e) => {
+        pointers.current.delete(e.pointerId)
+        if (pointers.current.size === 0) {
+          dragMode.current = null
+          startPt.current = null
+          pinchLast.current = null
+          endInteraction()
+        }
       }}
       onPointerLeave={() => {
-        dragMode.current = null
-        fireCursor(null)
-        showCoord(null)
-        endInteraction()
+        if (pointers.current.size === 0) {
+          dragMode.current = null
+          pinchLast.current = null
+          fireCursor(null)
+          showCoord(null)
+          endInteraction()
+        }
       }}
     />
     </div>

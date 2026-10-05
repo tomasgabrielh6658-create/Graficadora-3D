@@ -322,11 +322,11 @@ export default function Module2() {
           )}
         </Section>
       </Sidebar>
-      <main className="order-first flex min-h-[55dvh] min-w-0 flex-1 flex-col lg:order-none lg:min-h-0">
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <div className="flex min-w-0 flex-1 flex-col">
+      <main className="order-first flex min-w-0 flex-col lg:order-none lg:min-h-0 lg:flex-1">
+        <div className="flex flex-col lg:min-h-0 lg:flex-1 lg:flex-row">
+          <div className="flex min-w-0 flex-col lg:flex-1">
             <PanelTitle>Plano xy — región original</PanelTitle>
-            <div className="min-h-[36dvh] min-w-0 flex-1 p-2 lg:min-h-0">
+            <div className="h-[34dvh] min-w-0 p-2 lg:h-auto lg:min-h-0 lg:flex-1">
               <Plot2D
                 view={view}
                 onView={setView}
@@ -381,9 +381,9 @@ export default function Module2() {
               />
             </div>
           </div>
-          <div className="flex w-[42%] min-w-0 shrink-0 flex-col border-l border-line">
+          <div className="flex w-full min-w-0 flex-col border-t border-line lg:w-[42%] lg:shrink-0 lg:border-l lg:border-t-0">
             <PanelTitle>Plano transformado ({isAngular ? 'θ, r' : 'u, v'})</PanelTitle>
-            <div className="min-h-[36dvh] min-w-0 flex-1 p-2 lg:min-h-0">
+            <div className="h-[32dvh] min-w-0 p-2 lg:h-auto lg:min-h-0 lg:flex-1">
               <Plot2D
                 view={{ x0: T.uRange[0], x1: T.uRange[1], y0: T.vRange[0], y1: T.vRange[1] }}
                 field={uvField}

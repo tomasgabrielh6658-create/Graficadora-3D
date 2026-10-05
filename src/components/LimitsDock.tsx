@@ -79,8 +79,8 @@ export function LimitsDock({
       <span className="text-amber-600" title="Algún límite no tiene una fórmula simple: se muestra su valor aproximado">≈ con valores aproximados</span>
     )
   return (
-    <div className="flex shrink-0 items-stretch overflow-x-auto border-t border-ink bg-white">
-      <div className="flex min-w-0 shrink-0 flex-col justify-center border-r border-line px-4 py-2.5">
+    <div className="flex shrink-0 flex-col border-t border-ink bg-white sm:flex-row sm:items-stretch sm:overflow-x-auto">
+      <div className="flex min-w-0 shrink-0 flex-col justify-center border-b border-line px-4 py-2.5 sm:border-b-0 sm:border-r">
         <div className="mb-1 flex items-center gap-3 font-mono text-[10px] uppercase tracking-wider">
           <span className="text-cobalt">la integral</span>
           <span className="normal-case tracking-normal">{badge}</span>
@@ -95,20 +95,20 @@ export function LimitsDock({
             {copied ? <Check size={10} /> : <Copy size={10} />} {copied ? 'copiado' : 'copiar LaTeX'}
           </button>
         </div>
-        <div className={`transition-opacity ${status === 'pending' ? 'opacity-50' : ''}`}>
+        <div className={`overflow-x-auto transition-opacity ${status === 'pending' ? 'opacity-50' : ''}`}>
           {tex ? <TeX tex={tex} className="text-[16px] text-ink" /> : <span className="text-xs text-mute">Agregá desigualdades que encierren una región.</span>}
         </div>
         {parts && <div className="mt-1 text-[11px] text-cobalt">{parts}</div>}
       </div>
       {live && live.length > 0 && (
-        <div className="flex min-w-[220px] flex-col justify-center gap-1 px-4 py-2 text-xs text-ink/80">
+        <div className="flex flex-col justify-center gap-1 px-4 py-2 text-xs text-ink/80 sm:min-w-[220px]">
           {live.map((l, i) => (
-            <div key={i} className="whitespace-nowrap">{l}</div>
+            <div key={i} className="sm:whitespace-nowrap">{l}</div>
           ))}
         </div>
       )}
       {(warnings?.length || note) && (
-        <div className="ml-auto flex max-w-sm shrink-0 flex-col justify-center gap-1 border-l border-line px-4 py-2">
+        <div className="flex max-w-sm shrink-0 flex-col justify-center gap-1 border-t border-line px-4 py-2 sm:ml-auto sm:border-l sm:border-t-0">
           {warnings?.map((w, i) => (
             <div key={i} className="flex items-center gap-1.5 border-l-2 border-amber-500 bg-amber-50 px-2 py-0.5 text-xs text-amber-900">
               <TriangleAlert size={12} className="shrink-0" /> {w}

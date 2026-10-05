@@ -26,6 +26,13 @@ const HINTS: Record<number, string> = {
   4: '3D: arrastrar = girar · click derecho = mover · rueda = zoom · click en el panel derecho = explorar',
 }
 
+const HINTS_TOUCH: Record<number, string> = {
+  1: 'arrastrar = mover · pinza = zoom · tocá la línea violeta para mover el corte',
+  2: 'tocá un plano y mirá el punto equivalente en el otro · pinza = zoom',
+  3: '3D: un dedo = girar · dos dedos = mover y zoom · tocá la sombra para ubicar la flecha',
+  4: '3D: un dedo = girar · dos dedos = mover y zoom · tocá el panel de abajo = explorar',
+}
+
 function Credit() {
   return (
     <a
@@ -161,7 +168,9 @@ export default function App() {
       </Suspense>
       <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-line bg-paper px-4 text-[11px]">
         <span className="truncate font-mono text-[10px] text-mute">
-          <span className="text-cobalt">›</span> {HINTS[mod]}
+          <span className="text-cobalt">›</span>{' '}
+          <span className="hidden sm:inline">{HINTS[mod]}</span>
+          <span className="sm:hidden">{HINTS_TOUCH[mod]}</span>
           <span className="ml-3 hidden text-ink/35 xl:inline">teclas 1–4 = cambiar módulo</span>
         </span>
         <span className="ml-auto shrink-0">

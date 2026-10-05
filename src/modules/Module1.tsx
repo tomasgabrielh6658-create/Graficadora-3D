@@ -139,9 +139,9 @@ export default function Module1() {
           </div>
         </Section>
       </Sidebar>
-      <main className="order-first flex min-h-[55dvh] min-w-0 flex-1 flex-col lg:order-none lg:min-h-0">
+      <main className="order-first flex min-w-0 flex-col lg:order-none lg:min-h-0 lg:flex-1">
         <PanelTitle>Plano xy</PanelTitle>
-        <div className="min-h-0 flex-1 p-2">
+        <div className="h-[48dvh] min-w-0 p-2 lg:h-auto lg:min-h-0 lg:flex-1">
           <Plot2D
             view={view}
             onView={setView}

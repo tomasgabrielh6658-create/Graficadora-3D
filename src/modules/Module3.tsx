@@ -15,7 +15,7 @@ import { Plot2D } from '../components/Plot2D'
 import { Arrow3D, Label3D, Scene3D, Solid } from '../components/Scene3D'
 import { ConstraintEditor } from '../components/ConstraintEditor'
 import { LimitsDock, TeX } from '../components/LimitsDock'
-import { Btn, Section, Select, SliderRow, Toggle } from '../components/ui'
+import { Btn, Section, Select, SliderRow, Toggle, NumField, PanelHint, PanelTitle, Sidebar } from '../components/ui'
 import { Scan } from 'lucide-react'
 const DEFAULT_BBOX: BBox = { x0: -2.6, x1: 2.6, y0: -2.6, y1: 2.6, z0: -0.5, z1: 4.6 }
 
@@ -167,7 +167,7 @@ export default function Module3() {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <aside className="w-[330px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white">
+      <Sidebar>
         <Section title="Ejercicios típicos">
           <Select
             value={PRESETS.some((p) => p.id === presetId && p.module === 3) ? presetId : ''}
@@ -187,14 +187,14 @@ export default function Module3() {
               <button
                 key={o}
                 onClick={() => setOrder(o)}
-                className={`rounded border px-1.5 py-1 text-[10px] font-mono ${
+                className={`border px-1.5 py-1.5 text-[10px] font-mono ${
                   order === o
-                    ? 'border-sky-500 bg-sky-50 text-sky-800'
-                    : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                    ? 'border-cobalt bg-cobalt-50 text-ink'
+                    : 'border-line text-mute hover:border-ink hover:text-ink'
                 }`}
               >
                 <TeX tex={ORDER_INFO[o].tex} />
-                <span className="ml-1 text-[9px] text-slate-400">{ORDER_INFO[o].typeLabel}</span>
+                <span className="ml-1 text-[9px] text-mute">{ORDER_INFO[o].typeLabel}</span>
               </button>
             ))}
           </div>
@@ -240,20 +240,11 @@ export default function Module3() {
           </Btn>
           <div className="mt-3 grid grid-cols-3 gap-1.5">
             {(['x0', 'x1', 'y0', 'y1', 'z0', 'z1'] as const).map((k) => (
-              <label key={k} className="flex items-center gap-1 text-[10px] text-slate-500">
-                {k}
-                <input
-                  type="number"
-                  step={0.5}
-                  className="w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[10px]"
-                  value={bbox[k]}
-                  onChange={(e) => setBbox({ ...bbox, [k]: Number(e.target.value) })}
-                />
-              </label>
+              <NumField key={k} label={k} value={bbox[k]} onChange={(v) => setBbox({ ...bbox, [k]: v })} />
             ))}
           </div>
         </Section>
-      </aside>
+      </Sidebar>
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1">
           <div className="min-w-0 flex-1 p-2">
@@ -273,15 +264,13 @@ export default function Module3() {
               )}
             </Scene3D>
           </div>
-          <div className="flex w-[340px] shrink-0 flex-col border-l border-slate-200 bg-white">
-            <div className="border-b border-slate-100 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Sombra en plano {info.plane} · barrido {midIsH ? 'T2 (horizontal)' : 'T1 (vertical)'}
-            </div>
+          <div className="flex w-[340px] shrink-0 flex-col border-l border-line bg-white">
+            <PanelTitle>Sombra en plano {info.plane} · barrido {midIsH ? 'T2 (horizontal)' : 'T1 (vertical)'}</PanelTitle>
             <div className="min-h-0 flex-1">
               <Plot2D
                 view={{ x0: ranges.u0, x1: ranges.u1, y0: ranges.v0, y1: ranges.v1 }}
                 geom={shadowGeom}
-                fill="rgba(56,189,248,0.30)"
+                fill="rgba(31,59,245,0.16)"
                 sweep={{
                   axis: midIsH ? 'h' : 'v',
                   pos: outerPos,
@@ -294,9 +283,7 @@ export default function Module3() {
                 axisLabels={[hAxis, vAxis]}
               />
             </div>
-            <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">
-              Click en la sombra para posicionar la flecha 3D · arrastrar = mover la vista
-            </div>
+            <PanelHint>Click en la sombra para posicionar la flecha 3D · arrastrar = mover la vista</PanelHint>
           </div>
         </div>
         <LimitsDock
@@ -330,8 +317,8 @@ export default function Module3() {
           note={activePreset?.note}
         />
         {activePreset?.limitsTex && (
-          <div className="border-t border-slate-100 bg-slate-50 px-4 py-1 text-[11px] text-slate-500">
-            Referencia del TP: <TeX tex={activePreset.limitsTex} />
+          <div className="shrink-0 border-t border-line bg-paper px-4 py-1 text-[11px] text-mute">
+            <span className="mr-1 font-mono text-[9.5px] uppercase tracking-wider text-cobalt">referencia del TP</span> <TeX tex={activePreset.limitsTex} />
           </div>
         )}
       </main>

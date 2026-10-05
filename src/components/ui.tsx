@@ -142,7 +142,7 @@ export function NumField({
   step?: number
 }) {
   return (
-    <label className="flex min-w-0 items-center border border-line text-[11px] focus-within:border-cobalt hover:border-ink">
+    <label className="flex min-w-0 flex-1 items-center border border-line text-[11px] focus-within:border-cobalt hover:border-ink">
       <span className="shrink-0 border-r border-line bg-paper px-1.5 py-1 font-mono text-[10px] text-mute">{label}</span>
       <input
         type="number"

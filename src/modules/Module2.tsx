@@ -12,7 +12,7 @@ import {
 import { Plot2D } from '../components/Plot2D'
 import { ConstraintEditor } from '../components/ConstraintEditor'
 import { LimitsDock, TeX } from '../components/LimitsDock'
-import { Btn, Section, Select, SliderRow } from '../components/ui'
+import { Btn, Section, Select, SliderRow, NumField, PanelTitle, Sidebar } from '../components/ui'
 import { Scan } from 'lucide-react'
 
 type Kind = 'polar' | 'elliptic' | 'linear' | 'custom'
@@ -189,7 +189,7 @@ export default function Module2() {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <aside className="w-[330px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white">
+      <Sidebar>
         <Section title="Ejercicios típicos">
           <Select
             value={PRESETS.some((p) => p.id === presetId && p.module === 2) ? presetId : ''}
@@ -218,50 +218,38 @@ export default function Module2() {
           />
           {kind === 'custom' && (
             <div className="mt-2 space-y-1.5">
-              <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <label className="flex items-center gap-1.5 text-[11px] text-mute">
                 <span className="w-14 shrink-0">x(u,v) =</span>
-                <input className="w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]" value={custom.xExpr} onChange={(e) => setCustom({ ...custom, xExpr: e.target.value })} spellCheck={false} />
+                <input className="w-full border border-line px-1.5 py-1 font-mono text-[11px] outline-none focus:border-cobalt" value={custom.xExpr} onChange={(e) => setCustom({ ...custom, xExpr: e.target.value })} spellCheck={false} />
               </label>
-              <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <label className="flex items-center gap-1.5 text-[11px] text-mute">
                 <span className="w-14 shrink-0">y(u,v) =</span>
-                <input className="w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]" value={custom.yExpr} onChange={(e) => setCustom({ ...custom, yExpr: e.target.value })} spellCheck={false} />
+                <input className="w-full border border-line px-1.5 py-1 font-mono text-[11px] outline-none focus:border-cobalt" value={custom.yExpr} onChange={(e) => setCustom({ ...custom, yExpr: e.target.value })} spellCheck={false} />
               </label>
               <div className="grid grid-cols-4 gap-1">
                 {(['u0', 'u1', 'v0', 'v1'] as const).map((k) => (
-                  <label key={k} className="flex items-center gap-0.5 text-[10px] text-slate-500">
-                    {k}
-                    <input type="number" step={0.5} className="w-full rounded border border-slate-300 px-0.5 py-0.5 font-mono text-[10px]" value={custom[k]} onChange={(e) => setCustom({ ...custom, [k]: Number(e.target.value) })} />
-                  </label>
+                  <NumField key={k} label={k} value={custom[k]} onChange={(v) => setCustom({ ...custom, [k]: v })} />
                 ))}
               </div>
               {customErrRef.current && (
-                <div className="text-[10px] text-rose-600">{customErrRef.current}</div>
+                <div className="text-[10.5px] text-rose-600">{customErrRef.current}</div>
               )}
             </div>
           )}
           {kind === 'elliptic' && (
             <div className="mt-2 flex gap-1.5">
-              <label className="flex flex-1 items-center gap-1 text-[11px] text-slate-500">
-                a
-                <input type="number" step={0.5} className="w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]" value={ea} onChange={(e) => setEa(Number(e.target.value))} />
-              </label>
-              <label className="flex flex-1 items-center gap-1 text-[11px] text-slate-500">
-                b
-                <input type="number" step={0.5} className="w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]" value={eb} onChange={(e) => setEb(Number(e.target.value))} />
-              </label>
+              <NumField label="a" value={ea} onChange={(v) => setEa(v)} />
+              <NumField label="b" value={eb} onChange={(v) => setEb(v)} />
             </div>
           )}
           {kind === 'linear' && (
             <div className="mt-2 grid grid-cols-4 gap-1.5">
               {(['a', 'b', 'c', 'd'] as const).map((k, i) => (
-                <label key={k} className="flex items-center gap-1 text-[11px] text-slate-500">
-                  {k}
-                  <input type="number" step={0.5} className="w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]" value={lin[i]} onChange={(e) => setLin((l) => l.map((v, j) => (j === i ? Number(e.target.value) : v)))} />
-                </label>
+                <NumField key={k} label={k} value={lin[i]} onChange={(n) => setLin((l) => l.map((v, j) => (j === i ? n : v)))} />
               ))}
             </div>
           )}
-          <div className="mt-2 rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
+          <div className="mt-2 border border-line bg-paper px-2 py-1 text-[11px] text-ink">
             <TeX tex={T.jacobianTex} />
           </div>
         </Section>
@@ -296,13 +284,11 @@ export default function Module2() {
             />
           )}
         </Section>
-      </aside>
+      </Sidebar>
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
-            <div className="border-b border-slate-100 bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Plano xy — región original
-            </div>
+            <PanelTitle>Plano xy — región original</PanelTitle>
             <div className="min-h-0 flex-1 p-2">
               <Plot2D
                 view={view}
@@ -357,10 +343,8 @@ export default function Module2() {
               />
             </div>
           </div>
-          <div className="flex w-[42%] min-w-0 shrink-0 flex-col border-l border-slate-200">
-            <div className="border-b border-slate-100 bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Plano transformado ({isAngular ? 'θ, r' : 'u, v'})
-            </div>
+          <div className="flex w-[42%] min-w-0 shrink-0 flex-col border-l border-line">
+            <PanelTitle>Plano transformado ({isAngular ? 'θ, r' : 'u, v'})</PanelTitle>
             <div className="min-h-0 flex-1 p-2">
               <Plot2D
                 view={{ x0: T.uRange[0], x1: T.uRange[1], y0: T.vRange[0], y1: T.vRange[1] }}

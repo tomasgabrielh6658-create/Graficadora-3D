@@ -16,7 +16,7 @@ import { Scene3D, Solid } from '../components/Scene3D'
 import { CylindricalGuides, SphericalGuides, WarpedBox } from '../components/Guides3D'
 import { ConstraintEditor } from '../components/ConstraintEditor'
 import { LimitsDock, TeX } from '../components/LimitsDock'
-import { Btn, Section, Select, SliderRow, Toggle } from '../components/ui'
+import { Btn, Section, Select, SliderRow, Toggle, NumField, PanelHint, PanelTitle, Sidebar } from '../components/ui'
 import { Scan } from 'lucide-react'
 
 type Mode = 'cyl' | 'cyle' | 'sph'
@@ -197,7 +197,7 @@ export default function Module4() {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <aside className="w-[330px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white">
+      <Sidebar>
         <Section title="Ejercicios típicos">
           <Select
             value={PRESETS.some((p) => p.id === presetId && p.module === 4) ? presetId : ''}
@@ -220,17 +220,11 @@ export default function Module4() {
           />
           {mode === 'cyle' && (
             <div className="mt-2 flex gap-1.5">
-              <label className="flex flex-1 items-center gap-1 text-[11px] text-slate-500">
-                a
-                <input type="number" step={0.5} className="w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]" value={ea} onChange={(e) => setEa(Number(e.target.value))} />
-              </label>
-              <label className="flex flex-1 items-center gap-1 text-[11px] text-slate-500">
-                b
-                <input type="number" step={0.5} className="w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]" value={eb} onChange={(e) => setEb(Number(e.target.value))} />
-              </label>
+              <NumField label="a" value={ea} onChange={(v) => setEa(v)} />
+              <NumField label="b" value={eb} onChange={(v) => setEb(v)} />
             </div>
           )}
-          <div className="mt-2 rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
+          <div className="mt-2 border border-line bg-paper px-2 py-1 text-[11px] text-ink">
             <TeX tex={jacTex} />
           </div>
         </Section>
@@ -253,7 +247,7 @@ export default function Module4() {
             <Scan size={13} /> Encuadrar región
           </Btn>
         </Section>
-      </aside>
+      </Sidebar>
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1">
           <div className="min-w-0 flex-1 p-2">
@@ -270,10 +264,8 @@ export default function Module4() {
               {wedge && <WarpedBox {...wedge} />}
             </Scene3D>
           </div>
-          <div className="flex w-[340px] shrink-0 flex-col border-l border-slate-200 bg-white">
-            <div className="border-b border-slate-100 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              {isCyl ? 'Base en coordenadas (θ, r)' : 'Ángulos (θ, φ)'}
-            </div>
+          <div className="flex w-[340px] shrink-0 flex-col border-l border-line bg-white">
+            <PanelTitle>{isCyl ? 'Base en coordenadas (θ, r)' : 'Ángulos (θ, φ)'}</PanelTitle>
             <div className="min-h-0 flex-1">
               <Plot2D
                 view={
@@ -282,7 +274,7 @@ export default function Module4() {
                     : { x0: 0, x1: TAU, y0: 0, y1: Math.PI }
                 }
                 geom={panelGeom}
-                fill={isCyl ? 'rgba(56,189,248,0.30)' : 'rgba(167,139,250,0.30)'}
+                fill={isCyl ? 'rgba(31,59,245,0.16)' : 'rgba(167,139,250,0.30)'}
                 marks={
                   isCyl
                     ? [{ x: theta, y: rPos, color: '#a855f7' }]
@@ -304,9 +296,7 @@ export default function Module4() {
                 }}
               />
             </div>
-            <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-400">
-              Click en el panel para mover {isCyl ? 'θ y r' : 'θ y φ'} · arrastrar = mover la vista
-            </div>
+            <PanelHint>Click en el panel para mover {isCyl ? 'θ y r' : 'θ y φ'} · arrastrar = mover la vista</PanelHint>
           </div>
         </div>
         <LimitsDock

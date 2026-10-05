@@ -9,7 +9,7 @@ import { fmtNum } from '../lib/transforms'
 import { Plot2D } from '../components/Plot2D'
 import { ConstraintEditor } from '../components/ConstraintEditor'
 import { LimitsDock, TeX } from '../components/LimitsDock'
-import { Btn, Section, Select, SliderRow } from '../components/ui'
+import { Btn, Section, Select, SliderRow, NumField, PanelTitle, Sidebar } from '../components/ui'
 import { Scan } from 'lucide-react'
 import type { SweepType2D } from '../types'
 
@@ -93,7 +93,7 @@ export default function Module1() {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <aside className="w-[330px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white">
+      <Sidebar>
         <Section title="Ejercicios típicos">
           <Select
             value={PRESETS.some((p) => p.id === presetId && p.module === 1) ? presetId : ''}
@@ -142,21 +142,13 @@ export default function Module1() {
           </Btn>
           <div className="grid grid-cols-2 gap-1.5">
             {(['x0', 'x1', 'y0', 'y1'] as const).map((k) => (
-              <label key={k} className="flex items-center gap-1 text-[11px] text-slate-500">
-                {k}
-                <input
-                  type="number"
-                  step={0.5}
-                  className="w-full rounded border border-slate-300 px-1 py-0.5 font-mono text-[11px]"
-                  value={view[k]}
-                  onChange={(e) => setView({ ...view, [k]: Number(e.target.value) })}
-                />
-              </label>
+              <NumField key={k} label={k} value={view[k]} onChange={(v) => setView({ ...view, [k]: v })} />
             ))}
           </div>
         </Section>
-      </aside>
+      </Sidebar>
       <main className="flex min-w-0 flex-1 flex-col">
+        <PanelTitle>Plano xy · barrido {sweep === 'T1' ? 'T1 vertical (dy dx)' : 'T2 horizontal (dx dy)'}</PanelTitle>
         <div className="min-h-0 flex-1 p-2">
           <Plot2D
             view={view}
@@ -213,8 +205,8 @@ export default function Module1() {
           note={activePreset?.note}
         />
         {activePreset?.limitsTex && (
-          <div className="border-t border-slate-100 bg-slate-50 px-4 py-1 text-[11px] text-slate-500">
-            Referencia del TP: <TeX tex={activePreset.limitsTex} />
+          <div className="shrink-0 border-t border-line bg-paper px-4 py-1 text-[11px] text-mute">
+            <span className="mr-1 font-mono text-[9.5px] uppercase tracking-wider text-cobalt">referencia del TP</span> <TeX tex={activePreset.limitsTex} />
           </div>
         )}
       </main>

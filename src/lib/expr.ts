@@ -1,5 +1,5 @@
-import { parse } from 'mathjs'
-import type { MathNode } from 'mathjs'
+import { parse } from 'mathjs/number'
+import type { MathNode } from 'mathjs/number'
 
 export type FieldFn = (x: number, y: number, z: number) => number
 

@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import type { BBox } from '../types'
 import type { SolidMesh } from '../lib/marchingTets'
 import { bboxRadius, fitDistance, fitZoom, FOV, viewPose, type ViewName } from '../lib/camera'
+import { DPR } from '../lib/lowpower'
 
 export type Vec3 = [number, number, number]
 
@@ -341,7 +342,7 @@ export function Scene3D({
         key={ortho ? 'o' : 'p'}
         orthographic={ortho}
         frameloop={spin ? 'always' : 'demand'}
-        dpr={[1, 1.75]}
+        dpr={DPR}
         gl={{ antialias: true }}
         camera={ortho ? { zoom: 60, up: [0, 0, 1], position: [5, -8, 5] } : { fov: FOV, up: [0, 0, 1], position: [5, -8, 5] }}
       >

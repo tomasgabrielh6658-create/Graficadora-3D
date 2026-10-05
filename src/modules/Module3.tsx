@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { buildRegion } from '../lib/field'
 import { buildRegionMesh } from '../lib/regionMesh'
+import { MESH_N, MESH_N_SURF } from '../lib/lowpower'
 import { bounds2D, planeRanges, shadowField } from '../lib/shadow'
 import { sweepRegion } from '../lib/sweeps'
 import { intervalsLe0 } from '../lib/roots'
@@ -52,13 +53,13 @@ export default function Module3() {
 
   const mesh = useMemo(() => {
     const act = cons.filter((c) => c.visible)
-    return buildRegionMesh(act.map((c) => c.field), act.map((c) => c.color), bbox, 36)
+    return buildRegionMesh(act.map((c) => c.field), act.map((c) => c.color), bbox, MESH_N)
   }, [cons, bbox])
 
   // Cada superficie frontera dibujada "virgen" (sin cortar por las demás),
   // como las muestra GeoGebra — estilo F(x,y,z)=0 completa dentro del viewport.
   const surfMeshes = useMemo(
-    () => (showSurf ? cons.filter((c) => c.visible).map((c) => buildRegionMesh([c.field], [c.color], bbox, 34)) : []),
+    () => (showSurf ? cons.filter((c) => c.visible).map((c) => buildRegionMesh([c.field], [c.color], bbox, MESH_N_SURF)) : []),
     [cons, bbox, showSurf],
   )
 
@@ -171,7 +172,7 @@ export default function Module3() {
   ]
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-visible">
       <Sidebar fig={3}>
         <Section title="Ejemplos">
           <PresetPicker module={3} value={presetId} onChange={applyPreset} />
@@ -208,9 +209,9 @@ export default function Module3() {
           <BoxEditor bbox={bbox} onChange={setBbox} />
         </Section>
       </Sidebar>
-      <main className="flex min-w-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1">
-          <div className="min-w-0 flex-1 p-2">
+      <main className="order-first flex min-h-[55dvh] min-w-0 flex-1 flex-col lg:order-none lg:min-h-0">
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          <div className="min-h-[45dvh] min-w-0 flex-1 p-2 lg:min-h-0">
             <Scene3D bbox={bbox}>
               <Solid mesh={mesh} opacity={opacity} wireframe={wire} />
               {surfMeshes.map((m, i) => (
@@ -225,9 +226,9 @@ export default function Module3() {
               )}
             </Scene3D>
           </div>
-          <div className="flex w-[340px] shrink-0 flex-col border-l border-line bg-white">
+          <div className="flex w-full shrink-0 flex-col border-t border-line bg-white lg:w-[340px] lg:border-l lg:border-t-0">
             <PanelTitle>Sombra en el plano {info.plane}</PanelTitle>
-            <div className="min-h-0 flex-1">
+            <div className="min-h-[38dvh] flex-1 lg:min-h-0">
               <Plot2D
                 view={{ x0: ranges.u0, x1: ranges.u1, y0: ranges.v0, y1: ranges.v1 }}
                 geom={shadowGeom}

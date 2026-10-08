@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff, Plus, Redo2, Trash2, Undo2 } from 'lucide-react'
+import { Eye, EyeOff, Keyboard, Plus, Redo2, Trash2, Undo2 } from 'lucide-react'
 import { PALETTE, parseConstraint } from '../lib/expr'
 import type { RawConstraint } from '../lib/presets'
+import { toggleMathKb } from '../lib/kb'
 import { TeX } from './LimitsDock'
 import { Btn } from './ui'
 
@@ -76,7 +77,7 @@ export function ConstraintEditor({
   const add = () => {
     const p = parseConstraint(draft, dims)
     if (!p.ok) return
-    apply([...raws, { raw: draft.trim(), side: 'le', color: PALETTE[raws.length % PALETTE.length], visible: true }])
+    apply([...raws, { raw: draft.trim(), side: p.needsSide ? 'auto' : 'le', color: PALETTE[raws.length % PALETTE.length], visible: true }])
     setDraft('')
   }
   const update = (i: number, patch: Partial<RawConstraint>, key?: string) =>
@@ -85,7 +86,7 @@ export function ConstraintEditor({
   return (
     <div className="space-y-1">
       <div className="-mt-1 mb-1 flex items-center justify-between">
-        <span className="text-[11px] text-mute">Una desigualdad por fila. Click en una para editarla.</span>
+        <span className="text-[11px] text-mute">Una condición por fila (= o desigualdad). Click en una para editarla.</span>
         <span className="flex">
           <button className="grid h-6 w-6 place-items-center text-mute hover:text-ink disabled:opacity-30" onClick={undo} disabled={!past.current.length} title="Deshacer (Ctrl+Z)"><Undo2 size={13} /></button>
           <button className="grid h-6 w-6 place-items-center text-mute hover:text-ink disabled:opacity-30" onClick={redo} disabled={!future.current.length} title="Rehacer (Ctrl+Y)"><Redo2 size={13} /></button>
@@ -93,7 +94,13 @@ export function ConstraintEditor({
       </div>
       {raws.map((r, i) => {
         const parsed = parseConstraint(r.raw, dims)
-        const tex = parsed.ok && parsed.build ? parsed.build(r.side).latex : null
+        // Con `=` + auto se muestra la ecuación como en el TP, no la desigualdad
+        // que la app eligió (esa se ve en el gráfico y en "entra por/sale por").
+        const tex = parsed.ok && parsed.build
+          ? r.side === 'auto' && parsed.previewTex
+            ? parsed.previewTex
+            : parsed.build(r.side === 'auto' ? 'le' : r.side).latex
+          : null
         const isEditing = editing === i || !parsed.ok
         return (
           <div key={i}>
@@ -112,6 +119,7 @@ export function ConstraintEditor({
               {isEditing ? (
                 <input
                   autoFocus={editing === i}
+                  data-math=""
                   className="min-w-0 flex-1 bg-transparent py-1.5 pr-1 font-mono text-[12px] outline-none"
                   value={r.raw}
                   onChange={(e) => update(i, { raw: e.target.value }, `text-${i}`)}
@@ -147,7 +155,7 @@ export function ConstraintEditor({
               <select
                 className="mt-0.5 w-full border border-line bg-paper px-1 py-0.5 text-[10.5px] text-ink/80"
                 value={r.side}
-                onChange={(e) => update(i, { side: e.target.value as 'le' | 'ge' })}
+                onChange={(e) => update(i, { side: e.target.value as RawConstraint['side'] })}
               >
                 {parsed.sideOptions.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -160,15 +168,24 @@ export function ConstraintEditor({
       })}
       <div className="flex items-stretch gap-1 pt-1">
         <input
+          data-math=""
           className={`min-w-0 flex-1 border border-dashed px-2 py-1.5 font-mono text-[12px] outline-none focus:border-solid ${
             preview && !preview.ok ? 'border-rose-400 bg-rose-50' : 'border-ink/30 focus:border-cobalt'
           }`}
-          placeholder={dims === '3d' ? 'agregar: x^2+y^2 <= 4' : 'agregar: y >= x^2'}
+          placeholder={dims === '3d' ? 'agregar: z = x^2+y^2' : 'agregar: y = x^2'}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()}
           spellCheck={false}
         />
+        <button
+          className="grid w-7 shrink-0 place-items-center border border-line text-mute hover:border-cobalt hover:text-cobalt"
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={() => toggleMathKb()}
+          title="Teclado matemático (como GeoGebra)"
+        >
+          <Keyboard size={14} />
+        </button>
         <Btn variant="primary" onClick={add} disabled={!preview?.ok} title="Agregar (Enter)">
           <Plus size={14} />
         </Btn>
@@ -180,14 +197,15 @@ export function ConstraintEditor({
       )}
       {preview && !preview.ok && <div className="text-[10.5px] text-rose-600">{preview.error}</div>}
       {preview?.ok && preview.needsSide && (
-        <div className="text-[10.5px] text-cobalt">Es una igualdad: después de agregarla elegí qué lado queda adentro.</div>
+        <div className="text-[10.5px] text-cobalt">Es una igualdad: la app elige el lado que encierra la región (podés cambiarlo abajo de la fila).</div>
       )}
       <details className="pt-1 text-[10.5px] text-mute">
         <summary className="cursor-pointer select-none hover:text-ink">¿Cómo escribo?</summary>
         <div className="mt-1 space-y-0.5 font-mono leading-relaxed">
           <div>potencia: x^2 · raíz: sqrt(x) · producto: 2*x</div>
           <div>comparar: &lt;= &gt;= = · variables: {dims === '3d' ? 'x y z' : 'x y'}</div>
-          <div>sin cos tan exp log abs min max pi e</div>
+          <div>sin cos tan exp log abs min max pi e · polares: r theta (3D: rho phi)</div>
+          <div>con = la app elige el lado que encierra la región</div>
         </div>
       </details>
     </div>

@@ -85,7 +85,7 @@ function planCart2(req: Extract<PlanReq, { kind: 'cart2' }>): PlanRes {
       }
       return h.intervals.map((iv) => ({ a: iv.a, b: iv.b, ka: at(iv.a), kb: at(iv.b) }))
     },
-    cands: candidatesFor(rawStrings(req.raws), inner),
+    cands: candidatesFor(rawStrings(req.raws), inner, undefined, '2d'),
     outerVar: outer,
     innerSpan: iHi - iLo,
   })
@@ -159,7 +159,7 @@ function planCV2(req: Extract<PlanReq, { kind: 'cv2' }>): PlanRes {
       const iv = intervalsLe0((v) => g(u, v), vRange[0], vRange[1], 400)
       return iv.map((s) => ({ a: s.a, b: s.b, ka: key(u, s.a), kb: key(u, s.b) }))
     },
-    cands: candidatesFor(raws, vVar, subs),
+    cands: candidatesFor(raws, vVar, subs, '2d'),
     outerVar: uVar,
     innerSpan: vRange[1] - vRange[0],
     periodic: angular,

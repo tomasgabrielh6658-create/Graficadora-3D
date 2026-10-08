@@ -262,11 +262,11 @@ export default function Module2() {
             <div className="mt-2 space-y-1.5">
               <label className="flex items-center gap-1.5 text-[11px] text-mute">
                 <span className="w-14 shrink-0">x(u,v) =</span>
-                <input className="w-full border border-line px-1.5 py-1 font-mono text-[11px] outline-none focus:border-cobalt" value={custom.xExpr} onChange={(e) => setCustom({ ...custom, xExpr: e.target.value })} spellCheck={false} />
+                <input data-math="" className="w-full border border-line px-1.5 py-1 font-mono text-[11px] outline-none focus:border-cobalt" value={custom.xExpr} onChange={(e) => setCustom({ ...custom, xExpr: e.target.value })} spellCheck={false} />
               </label>
               <label className="flex items-center gap-1.5 text-[11px] text-mute">
                 <span className="w-14 shrink-0">y(u,v) =</span>
-                <input className="w-full border border-line px-1.5 py-1 font-mono text-[11px] outline-none focus:border-cobalt" value={custom.yExpr} onChange={(e) => setCustom({ ...custom, yExpr: e.target.value })} spellCheck={false} />
+                <input data-math="" className="w-full border border-line px-1.5 py-1 font-mono text-[11px] outline-none focus:border-cobalt" value={custom.yExpr} onChange={(e) => setCustom({ ...custom, yExpr: e.target.value })} spellCheck={false} />
               </label>
               <div className="grid grid-cols-2 gap-1">
                 {([['u0', 'u desde'], ['u1', 'hasta'], ['v0', 'v desde'], ['v1', 'hasta']] as const).map(([k, l]) => (

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { compileExpression, parseConstraint } from './expr'
+import { compileConstraints } from './useConstraints'
 import { intervalsLe0 } from './roots'
 import { buildRegion } from './field'
 import { marchingSquares } from './marchingSquares'
@@ -37,6 +38,93 @@ describe('parseConstraint', () => {
     const { fn } = compileExpression('sqrt(x^2+y^2) + 2*sin(x)', '2d')
     expect(fn(0, 0, 0)).toBeCloseTo(0)
     expect(fn(1, 0, 0)).toBeCloseTo(1 + 2 * Math.sin(1))
+  })
+})
+
+describe('notación del TP (polares, unicode, igualdades)', () => {
+  it('r = radio polar en 2D', () => {
+    const { fn } = compileExpression('r', '2d')
+    expect(fn(3, 4, 0)).toBeCloseTo(5)
+  })
+  it('theta = atan2(y,x)', () => {
+    const { fn } = compileExpression('theta', '2d')
+    expect(fn(0, 1, 0)).toBeCloseTo(Math.PI / 2)
+    expect(fn(-1, 0, 0)).toBeCloseTo(Math.PI)
+  })
+  it('rho/phi esféricas en 3D', () => {
+    expect(compileExpression('rho', '3d').fn(0, 0, 2)).toBeCloseTo(2)
+    expect(compileExpression('phi', '3d').fn(0, 0, 2)).toBeCloseTo(0)
+  })
+  it('r = 2 parsea y arma el círculo', () => {
+    const p = parseConstraint('r = 2', '2d')
+    expect(p.ok).toBe(true)
+    expect(p.needsSide).toBe(true)
+    const b = p.build!('le')
+    expect(b.field(0, 0, 0)).toBeLessThan(0)
+    expect(b.field(3, 0, 0)).toBeGreaterThan(0)
+  })
+  it('acepta caracteres unicode: ≤ ≥ θ π √ − × ÷', () => {
+    const p = parseConstraint('θ ≤ π/4', '2d')
+    expect(p.ok).toBe(true)
+    expect(p.build!('le').field(1, 0.2, 0)).toBeLessThan(0)
+    expect(p.build!('le').field(-1, 0, 0)).toBeGreaterThan(0)
+    const q = parseConstraint('√(x^2+y^2) − 2×x ≤ 0', '2d')
+    expect(q.ok).toBe(true)
+  })
+})
+
+describe('igualdad con lado auto', () => {
+  const raws = (list: [string, 'le' | 'ge' | 'auto'][]) =>
+    list.map(([raw, side], i) => ({ raw, side, color: '#000', visible: true }))
+
+  it('x^2+y^2=4 auto → queda el disco (le)', () => {
+    const { cons } = compileConstraints(
+      raws([['x^2 + y^2 = 4', 'auto']]),
+      '2d',
+    )
+    const region = buildRegion(cons)
+    expect(region.inside(0, 0, 0)).toBe(true)
+    expect(region.inside(3, 0, 0)).toBe(false)
+    expect(cons[0].kind).toBe('le')
+    expect(cons[0].latex).toContain('=')
+  })
+  it('y=x^2 junto a y=x auto → encierra la lente 0≤x≤1', () => {
+    const { cons } = compileConstraints(
+      raws([
+        ['y = x^2', 'auto'],
+        ['y = x', 'auto'],
+      ]),
+      '2d',
+    )
+    const region = buildRegion(cons)
+    expect(region.inside(0.5, 0.35, 0)).toBe(true) // entre parábola y recta
+    expect(region.inside(0.5, 0.1, 0)).toBe(false)
+    expect(region.inside(2, 2, 0)).toBe(false)
+  })
+  it('r=2 polar auto → disco', () => {
+    const { cons } = compileConstraints(raws([['r = 2', 'auto']]), '2d')
+    const region = buildRegion(cons)
+    expect(region.inside(0, 0, 0)).toBe(true)
+    expect(region.inside(0, 3, 0)).toBe(false)
+  })
+  it('el usuario puede forzar el lado manualmente', () => {
+    const { cons } = compileConstraints(raws([['x^2 + y^2 = 4', 'ge']]), '2d')
+    const region = buildRegion(cons)
+    expect(region.inside(0, 0, 0)).toBe(false)
+    expect(region.inside(3, 0, 0)).toBe(true)
+  })
+  it('z = x^2+y^2 auto con z=4 → paraboloide acotado', () => {
+    const { cons } = compileConstraints(
+      raws([
+        ['z = x^2 + y^2', 'auto'],
+        ['z = 4', 'auto'],
+      ]),
+      '3d',
+    )
+    const region = buildRegion(cons)
+    expect(region.inside(0, 0, 2)).toBe(true)
+    expect(region.inside(0, 0, 6)).toBe(false)
+    expect(region.inside(0, 0, -1)).toBe(false)
   })
 })
 

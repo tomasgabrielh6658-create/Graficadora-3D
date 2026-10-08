@@ -5,6 +5,7 @@ import Module1 from './modules/Module1'
 import Module2 from './modules/Module2'
 import { Btn, Logo } from './components/ui'
 import { AsciiSolid } from './components/AsciiArt'
+import { MathKeyboard } from './components/MathKeyboard'
 
 const Module3 = lazy(() => import('./modules/Module3'))
 const Module4 = lazy(() => import('./modules/Module4'))
@@ -166,6 +167,7 @@ export default function App() {
         {mod === 3 && <Module3 />}
         {mod === 4 && <Module4 />}
       </Suspense>
+      <MathKeyboard />
       <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-line bg-paper px-4 text-[11px]">
         <span className="truncate font-mono text-[10px] text-mute">
           <span className="text-cobalt">›</span>{' '}

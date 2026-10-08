@@ -35,7 +35,7 @@ const FUNC_RENAME: Record<string, string> = { ln: 'log' }
  * ------------------------------------------------------------------ */
 
 type Ast =
-  | { t: 'num'; v: number }
+  | { t: 'num'; v: number; name?: string }
   | { t: 'sym'; name: string }
   | { t: 'un'; op: '+' | '-'; a: Ast }
   | { t: 'bin'; op: '+' | '-' | '*' | '/' | '^' | '%'; a: Ast; b: Ast }
@@ -50,7 +50,17 @@ const isDigit = (c: string) => c >= '0' && c <= '9'
 const isAlpha = (c: string) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c === '_'
 const isAlnum = (c: string) => isAlpha(c) || isDigit(c)
 
-function tokenize(src: string): Tok[] {
+function tokenize(raw: string): Tok[] {
+  // Notación unicode del teclado virtual / copiada del TP.
+  const src = raw
+    .replace(/θ/g, 'theta')
+    .replace(/π/g, 'pi')
+    .replace(/ρ/g, 'rho')
+    .replace(/φ/g, 'phi')
+    .replace(/√/g, 'sqrt')
+    .replace(/−/g, '-')
+    .replace(/[·×]/g, '*')
+    .replace(/÷/g, '/')
   const toks: Tok[] = []
   let i = 0
   const n = src.length
@@ -93,7 +103,7 @@ function tokenize(src: string): Tok[] {
 const startsExpr = (t: Tok | undefined) =>
   !!t && (t.t === 'num' || t.t === 'id' || (t.t === 'op' && t.op === '('))
 
-function parseExpr(src: string, vars: Set<string>): Ast {
+function parseExpr(src: string, vars: Set<string>, aliases = false): Ast {
   const toks = tokenize(src)
   let pos = 0
   const peek = () => toks[pos]
@@ -168,7 +178,8 @@ function parseExpr(src: string, vars: Set<string>): Ast {
         throw new Error(`La función "${t.name}" necesita argumentos`)
       }
       if (vars.has(t.name)) return { t: 'sym', name: t.name }
-      if (t.name in CONSTS) return { t: 'num', v: CONSTS[t.name] }
+      if (aliases && t.name in ALIAS_JS) return { t: 'sym', name: `@${t.name}` }
+      if (t.name in CONSTS) return { t: 'num', v: CONSTS[t.name], name: t.name }
       if (p?.t === 'op' && p.op === '(') throw new Error(`Función no soportada: "${t.name}"`)
       throw new Error(`Variable no permitida: "${t.name}"`)
     }
@@ -195,17 +206,43 @@ function parseExpr(src: string, vars: Set<string>): Ast {
 
 /* ------------------------- AST → JS rápido ------------------------- */
 
-function astToJs(n: Ast): string {
+/** Alias polares/esféricos del TP: r, theta (θ), rho (ρ), phi (φ).
+ *  En el AST quedan como sym "@r" para no pisar una variable llamada r. */
+const ALIAS_JS: Record<string, string> = {
+  r: 'Math.hypot(x,y)',
+  theta: 'Math.atan2(y,x)',
+  rho: 'Math.hypot(x,y,z)',
+  phi: 'Math.atan2(Math.hypot(x,y),z)',
+}
+const ALIAS_TEX: Record<string, string> = {
+  r: 'r',
+  theta: '\\theta',
+  rho: '\\rho',
+  phi: '\\varphi',
+}
+
+// En 2D ρ y φ son el radio y el ángulo polares del TP (no los esféricos).
+const ALIAS_JS_2D: Record<string, string> = {
+  r: 'Math.hypot(x,y)',
+  theta: 'Math.atan2(y,x)',
+  rho: 'Math.hypot(x,y)',
+  phi: 'Math.atan2(y,x)',
+}
+
+function astToJs(n: Ast, dims?: '2d' | '3d'): string {
   switch (n.t) {
     case 'num': return `(${n.v})`
-    case 'sym': return n.name
-    case 'un': return n.op === '-' ? `(-(${astToJs(n.a)}))` : `(+(${astToJs(n.a)}))`
-    case 'call': return `Math.${n.name}(${n.args.map(astToJs).join(',')})`
+    case 'sym':
+      return n.name.startsWith('@')
+        ? `(${(dims === '2d' ? ALIAS_JS_2D : ALIAS_JS)[n.name.slice(1)]})`
+        : n.name
+    case 'un': return n.op === '-' ? `(-(${astToJs(n.a, dims)}))` : `(+(${astToJs(n.a, dims)}))`
+    case 'call': return `Math.${n.name}(${n.args.map((a) => astToJs(a, dims)).join(',')})`
     case 'bin':
       switch (n.op) {
-        case '^': return `Math.pow(${astToJs(n.a)},${astToJs(n.b)})`
-        case '%': return `(${astToJs(n.a)}%${astToJs(n.b)})`
-        default: return `(${astToJs(n.a)}${n.op}${astToJs(n.b)})`
+        case '^': return `Math.pow(${astToJs(n.a, dims)},${astToJs(n.b, dims)})`
+        case '%': return `(${astToJs(n.a, dims)}%${astToJs(n.b, dims)})`
+        default: return `(${astToJs(n.a, dims)}${n.op}${astToJs(n.b, dims)})`
       }
   }
 }
@@ -217,7 +254,11 @@ const PREC: Record<Ast['t'], number> = { num: 9, sym: 9, call: 9, un: 7, bin: 0 
 const BIN_PREC = { '+': 1, '-': 1, '*': 2, '/': 2, '%': 2, '^': 4 } as const
 const prec = (n: Ast) => (n.t === 'bin' ? BIN_PREC[n.op] : PREC[n.t])
 
-const numTex = (v: number) => {
+const CONST_TEX: Record<string, string> = {
+  pi: '\\pi', PI: '\\Pi', e: 'e', E: 'e', tau: '\\tau',
+}
+const numTex = (v: number, name?: string) => {
+  if (name && name in CONST_TEX) return CONST_TEX[name]
   if (Number.isInteger(v)) return String(v)
   const s = v.toPrecision(10).replace(/\.?0+$/, '')
   return s
@@ -238,8 +279,9 @@ function astToTex(n: Ast, parentPrec = 0, side: 'l' | 'r' | '' = ''): string {
   const p = prec(n)
   const wrap = (s: string, need: boolean) => (need ? `\\left(${s}\\right)` : s)
   switch (n.t) {
-    case 'num': return numTex(n.v)
-    case 'sym': return n.name
+    case 'num': return numTex(n.v, n.name)
+    case 'sym':
+      return n.name.startsWith('@') ? (ALIAS_TEX[n.name.slice(1)] ?? n.name.slice(1)) : n.name
     case 'un': {
       const inner = astToTex(n.a, 7)
       return wrap(`${n.op}${inner}`, n.a.t === 'un')
@@ -293,9 +335,9 @@ export function compileExpressionVars(
 
 export function compileExpression(src: string, dims: '2d' | '3d'): { fn: FieldFn; tex: string } {
   const vars = new Set(dims === '2d' ? ['x', 'y'] : ['x', 'y', 'z'])
-  const ast = parseExpr(src, vars)
+  const ast = parseExpr(src, vars, true) // aliases polares/esféricos on
   const tex = astToTex(ast)
-  const js = astToJs(ast)
+  const js = astToJs(ast, dims)
   const fast = new Function('x', 'y', 'z', `"use strict"; return (${js});`) as FieldFn
   const probe = fast(0.37, 0.11, 0.53)
   if (typeof probe !== 'number') throw new Error('evaluación inválida')
@@ -306,7 +348,7 @@ export interface ParsedConstraint {
   ok: boolean
   error?: string
   needsSide?: boolean
-  sideOptions?: { value: 'le' | 'ge'; label: string }[]
+  sideOptions?: { value: 'le' | 'ge' | 'auto'; label: string }[]
   previewTex?: string
   build?: (side: 'le' | 'ge') => { field: FieldFn; boundary: FieldFn; latex: string }
 }
@@ -315,7 +357,7 @@ const OP_PATTERN = ['<=', '>=', '<', '>', '=']
 const OP_RE = new RegExp('^(.*?)(' + OP_PATTERN.join('|') + ')(.*)$')
 
 export function parseConstraint(raw: string, dims: '2d' | '3d'): ParsedConstraint {
-  const m = raw.trim().match(OP_RE)
+  const m = raw.trim().replace(/≤/g, '<=').replace(/≥/g, '>=').match(OP_RE)
   if (!m) return { ok: false, error: 'Escribí una comparación, ej: y <= x^2' }
   const [, lhsRaw, op, rhsRaw] = m
   if (!lhsRaw.trim() || !rhsRaw.trim()) return { ok: false, error: 'Falta un lado de la comparación' }
@@ -334,19 +376,23 @@ export function parseConstraint(raw: string, dims: '2d' | '3d'): ParsedConstrain
     const lhsVar = lhsRaw.trim()
     const rhsVar = rhsRaw.trim()
     const single = (s: string) => /^[xyz]$/.test(s)
+    const autoOpt = { value: 'auto' as const, label: 'auto: la app elige el lado que encierra' }
     let sideOptions: ParsedConstraint['sideOptions']
     if (single(lhsVar)) {
       sideOptions = [
+        autoOpt,
         { value: 'le', label: `${lhsVar} ≤ … (acota por arriba/afuera)` },
         { value: 'ge', label: `${lhsVar} ≥ … (acota por abajo/adentro)` },
       ]
     } else if (single(rhsVar)) {
       sideOptions = [
+        autoOpt,
         { value: 'ge', label: `… ≤ ${rhsVar} (acota por arriba)` },
         { value: 'le', label: `… ≥ ${rhsVar} (acota por abajo)` },
       ]
     } else {
       sideOptions = [
+        autoOpt,
         { value: 'le', label: `${lhs.tex} − ${rhs.tex} ≤ 0 (zona interna)` },
         { value: 'ge', label: `${lhs.tex} − ${rhs.tex} ≥ 0 (zona externa)` },
       ]

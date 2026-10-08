@@ -3,7 +3,8 @@ import { PALETTE } from './expr'
 
 export interface RawConstraint {
   raw: string
-  side: 'le' | 'ge'
+  /** 'auto' = igualdad de TP: la app elige el lado que encierra la región */
+  side: 'le' | 'ge' | 'auto'
   color: string
   visible: boolean
 }

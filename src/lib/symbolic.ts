@@ -32,8 +32,34 @@ function safeSimplify(n: MathNode): MathNode {
   }
 }
 
-export function boundaryNode(raw: string): MathNode | null {
-  const m = raw.trim().match(OP_RE)
+/** Misma lectura que expr.ts: unicode y alias polares/esféricos (r, θ, ρ, φ).
+ *  En 2D ρ y φ son el radio y el ángulo polares del plano (los del TP). */
+function expandAliases(s: string, dims: '2d' | '3d' = '3d'): string {
+  const t = s
+    .replace(/≤/g, '<=')
+    .replace(/≥/g, '>=')
+    .replace(/θ/g, 'theta')
+    .replace(/π/g, 'pi')
+    .replace(/ρ/g, 'rho')
+    .replace(/φ/g, 'phi')
+    .replace(/√/g, 'sqrt')
+    .replace(/−/g, '-')
+    .replace(/[·×]/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/\btheta\b/g, '(atan2(y,x))')
+  return dims === '2d'
+    ? t
+        .replace(/\brho\b/g, '(sqrt(x^2+y^2))')
+        .replace(/\bphi\b/g, '(atan2(y,x))')
+        .replace(/\br\b/g, '(sqrt(x^2+y^2))')
+    : t
+        .replace(/\brho\b/g, '(sqrt(x^2+y^2+z^2))')
+        .replace(/\bphi\b/g, '(atan2(sqrt(x^2+y^2),z))')
+        .replace(/\br\b/g, '(sqrt(x^2+y^2))')
+}
+
+export function boundaryNode(raw: string, dims: '2d' | '3d' = '3d'): MathNode | null {
+  const m = expandAliases(raw, dims).trim().match(OP_RE)
   if (!m || !m[1].trim() || !m[3].trim()) return null
   try {
     return parse(`(${m[1]}) - (${m[3]})`)
@@ -458,11 +484,11 @@ export function toCandidate(n: MathNode): Candidate {
 }
 
 /** Candidatos para la variable v a partir de las fronteras (opcionalmente con cambio de variables). */
-export function candidatesFor(raws: string[], v: string, subs?: Record<string, string>): Candidate[] {
+export function candidatesFor(raws: string[], v: string, subs?: Record<string, string>, dims: '2d' | '3d' = '3d'): Candidate[] {
   const out: Candidate[] = []
   const seen = new Set<string>()
   for (const raw of raws) {
-    let F = boundaryNode(raw)
+    let F = boundaryNode(raw, dims)
     if (!F) continue
     if (subs) F = substitute(F, subs)
     for (const sol of solveFor(F, v)) {
@@ -481,7 +507,7 @@ export function candidatesFor(raws: string[], v: string, subs?: Record<string, s
  * más las intersecciones entre pares de superficies (k_i = k_j), despejadas
  * para la variable media.
  */
-export function shadowCandidates(raws: string[], pierce: string, mid: string, subs?: Record<string, string>): Candidate[] {
+export function shadowCandidates(raws: string[], pierce: string, mid: string, subs?: Record<string, string>, dims: '2d' | '3d' = '3d'): Candidate[] {
   const out: Candidate[] = []
   const seen = new Set<string>()
   const push = (n: MathNode) => {
@@ -494,7 +520,7 @@ export function shadowCandidates(raws: string[], pierce: string, mid: string, su
   const surf: MathNode[] = []
   const surfF: MathNode[] = []
   for (const raw of raws) {
-    let F = boundaryNode(raw)
+    let F = boundaryNode(raw, dims)
     if (!F) continue
     if (subs) F = substitute(F, subs)
     if (!hasSymbol(F, pierce)) {

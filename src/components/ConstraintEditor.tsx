@@ -122,7 +122,17 @@ export function ConstraintEditor({
                   data-math=""
                   className="min-w-0 flex-1 bg-transparent py-1.5 pr-1 font-mono text-[12px] outline-none"
                   value={r.raw}
-                  onChange={(e) => update(i, { raw: e.target.value }, `text-${i}`)}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    const np = parseConstraint(raw, dims)
+                    const wasEq = parseConstraint(r.raw, dims).needsSide
+                    const patch: Partial<RawConstraint> = { raw }
+                    // al pasar de desigualdad a `=` (o al revés) el lado se
+                    // resetea: `=` arranca en auto, desigualdad en ≤
+                    if (np.ok && np.needsSide && !wasEq) patch.side = 'auto'
+                    else if (np.ok && !np.needsSide && r.side === 'auto') patch.side = 'le'
+                    update(i, patch, `text-${i}`)
+                  }}
                   onBlur={() => setEditing(null)}
                   onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && (e.target as HTMLInputElement).blur()}
                   spellCheck={false}
